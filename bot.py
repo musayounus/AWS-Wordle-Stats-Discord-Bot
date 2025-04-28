@@ -7,6 +7,7 @@ import asyncio
 from discord import app_commands
 import dotenv
 import os
+
 dotenv.load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
