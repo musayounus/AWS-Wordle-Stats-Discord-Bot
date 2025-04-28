@@ -10,9 +10,6 @@ import os
 dotenv.load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
-if not TOKEN:
-    raise ValueError("DISCORD_BOT_TOKEN is not set in the environment variables.")
-
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True  # Important for reading message content
