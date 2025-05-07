@@ -167,15 +167,12 @@ Want to add Charts? Web Dashboard? Voice alerts? Let’s build it! 🎯
 ---
 
 ## 📜 License
-MIT — free to use, share, and modify.
+- MIT — free to use, share, and modify.
 
 ---
 
 ## 🙏 Acknowledgments
-discord.py
-
-asyncpg
-
-AWS
-
-Wordle by The New York Times
+- discord.py  
+- asyncpg  
+- AWS  
+- Wordle by The New York Times  
