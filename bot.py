@@ -12,7 +12,7 @@ import asyncio
 from discord import app_commands
 from dotenv import load_dotenv
 
-TEST_GUILD_ID = 1364244767201955910
+TEST_GUILD_ID = <YOUR TEST GUILD ID>
 
 # Prevent duplicate bot instances
 def is_bot_already_running():
@@ -46,16 +46,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # PostgreSQL connection pool
 async def create_db_pool():
     session = boto3.session.Session()
-    client = session.client('secretsmanager', region_name='eu-central-1')
+    client = session.client('secretsmanager', region_name='YOUR REGION')
     response = client.get_secret_value(
-        SecretId='arn:aws:secretsmanager:eu-central-1:222634374532:secret:rds!db-5bb0c45b-baa5-40c4-9763-6fc3136ad726'
+        SecretId='YOUR RDS ARN'
     )
     secret = json.loads(response['SecretString'])
     pool = await asyncpg.create_pool(
         user=secret['username'],
         password=secret['password'],
         database='postgres',
-        host='wordle-db.cjywummmsd5i.eu-central-1.rds.amazonaws.com',
+        host='YOUR RDS ENDPOINT',
         port=5432,
         ssl='require',
         min_size=1,
