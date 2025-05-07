@@ -7,6 +7,7 @@ The leaderboard is updated in real time and available via the `/leaderboard` sla
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RDS-blue)
 ![AWS](https://img.shields.io/badge/Hosted%20on-AWS-232F3E?logo=amazon-aws)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
