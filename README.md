@@ -1,6 +1,6 @@
 # 🟩 Wordle Discord Leaderboard Bot
 
-A smart, AWS-hosted Discord bot that automatically tracks daily Wordle results — including individual posts, `/share` messages, and official summary messages — and updates a leaderboard in real time.
+An AWS-hosted Discord bot that automatically tracks daily Wordle results, including individual posts (e.g. `Wordle 1418 3/6`), `/share` messages (official Wordle app command), and official daily summary messages (official Wordle app end-of-the-day message), and updates a leaderboard in real time.
 
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RDS-blue)
@@ -11,32 +11,80 @@ A smart, AWS-hosted Discord bot that automatically tracks daily Wordle results �
 ## 📌 Features
 
 ✅ Parse Wordle scores like `Wordle 1418 3/6` or `/share`  
-✅ Read official summary messages:  
+
+✅ Extract player data from official daily summary messages  
+
+✅ Auto-detect Wordle number based on the current date  
+
+✅ Slash commands: `/leaderboard`, `/resetleaderboard`  
+
+✅ Duplicate submission protection (DB constraints)  
+
+✅ Robust infrastructure monitoring (CloudWatch + SNS)  
+
+✅ Secure credentials (AWS Secrets Manager)  
+
+✅ Fully hosted on AWS using EC2 + RDS + systemd  
+
+---
+
+## ☁️ Hosted & Powered by AWS
+
+This bot is designed for **resilient, secure, 24/7 deployment** using AWS services:
+
+| Component        | AWS Service             | Purpose                                                   |
+|------------------|--------------------------|------------------------------------------------------------|
+| 💻 Hosting        | EC2 (Amazon Linux 2)     | Runs the Python bot 24/7 using a systemd-managed process   |
+| 🛢️ Database       | Amazon RDS (PostgreSQL)  | Stores all Wordle scores with automatic backups & scaling  |
+| 🔐 Secrets        | AWS Secrets Manager      | Securely manages database credentials                     |
+| 🧑‍💼 Permissions	   | IAM Roles + Policies	      | Enforces least-privilege access for EC2 (Secrets Manager, CloudWatch) |
+| 📈 Monitoring     | CloudWatch               | Tracks logs, resource usage, and sends alerts              |
+| 🔔 Notifications  | SNS (Simple Notification Service) | Sends email/SMS alerts on CPU spikes, DB overload         |
+| 🌐 Networking	    |Amazon VPC + Security Groups | Controls traffic to EC2 & RDS, with locked-down ingress/egress rules |
+---
+
+### 📊 Architecture Diagram
+
+```mermaid
+graph TD
+  Discord[Discord Users]
+  Bot[EC2 Bot - discord py]
+  RDS[Amazon RDS - PostgreSQL]
+  Secrets[AWS Secrets Manager]
+  IAM[IAM Role]
+  CW[CloudWatch Logs and Metrics]
+  SNS[SNS Alerts]
+  VPC[VPC - Private Network]
+
+  Discord --> Bot
+  Bot --> RDS
+  Bot --> Secrets
+  Bot --> CW
+  CW --> SNS
+  IAM --> Bot
+  RDS --> VPC
 ```
-Here are yesterday's results:
-👑 3/6: @Alice @Bob
-4/6: @Charlie
-X/6: @Dave
-```
-✅ Auto-detect Wordle number based on date
-✅ Slash commands: /leaderboard, /resetleaderboard
-✅ Secure DB access via AWS Secrets Manager
-✅ Real-time alerts via CloudWatch + SNS
-✅ Deployed on EC2 with systemd + file locking
+
+---
 
 ## ⚙️ Tech Stack
-Component	Tech
-Language	Python 3.9
-Framework	discord.py
-Database	PostgreSQL 17 on AWS RDS
-Hosting	AWS EC2 (t3.micro)
-Secrets	AWS Secrets Manager
-Monitoring	AWS CloudWatch + SNS
-Deployment	systemd (file lock, PID guard)
 
+| Component           | Tech                                |
+|---------------------|-------------------------------------|
+| Language            | Python 3.9                          |
+| Framework           | discord.py                          |
+| Database            | PostgreSQL 17 on AWS RDS            |
+| Hosting             | AWS EC2 (t2.micro)                  |
+| Secrets             | AWS Secrets Manager                 |
+| Monitoring          | AWS CloudWatch + SNS                |
+| Deployment          | systemd (file lock, PID guard)      |
+
+---
 ## 🧠 Bot Logic
-Scores are stored as:
 
+- Scores are stored as:
+
+```sql
 CREATE TABLE scores (
   id SERIAL PRIMARY KEY,
   user_id BIGINT,
@@ -46,43 +94,82 @@ CREATE TABLE scores (
   attempts INTEGER, -- NULL if user failed (X/6)
   UNIQUE(username, wordle_number)
 );
-X/6 is treated as a failed attempt and excluded from average, but counted as a game played.
+```
+
+- `X/6` is treated as a failed attempt and excluded from average.
+
+---
 
 ## 🚀 Usage
-Slash Commands:
-/leaderboard – Shows top 10 users sorted by lowest average attempts.
+### Slash Commands:
+- `/leaderboard` – Shows top 10 users sorted by lowest average attempts.
+  
+- `/resetleaderboard` – Admin-only command to wipe all scores.
 
-/resetleaderboard – Admin-only command to wipe all scores.
+### Accepted Formats:
+- `Wordle 1418 3/6`
 
-Manual Entry:
-Just type Wordle 1418 4/6 or share via /share from the official Wordle app.
+- `/share` from the Wordle app
 
-## 🛡️ Security & Monitoring
-.env contains the bot token and is excluded from Git.
+- Summary messages like:
+```
+Here are yesterday's results:
+👑 2/6: @Alice
+4/6: @Bob
+X/6: @Charlie
+```
 
-DB creds are managed with AWS Secrets Manager.
+---
 
-systemd prevents duplicate instances via lock file + psutil.
+## 🔐 Security & Monitoring
+- `.env` stores Discord bot token (never committed to Git)
 
-CloudWatch logs and alerts notify of failures, CPU spikes, or DB issues.
+- Database credentials are stored in AWS Secrets Manager  
+
+- The bot runs as a systemd service, with:
+  - File lock + PID protection (no duplicate instances)
+    
+  - Auto-restart on crash
+
+- CloudWatch logs:
+  - `/wordle-bot/application`
+    
+  - `/wordle-bot/system`
+
+- SNS notifications alert on:
+  - High CPU
+  
+  - RDS connection issues
+    
+  - Service restarts or failures
+
+---
 
 ## 🧾 Logs & Maintenance
-# Restart bot
+```
+# Restart bot  
 sudo systemctl restart wordle-bot
 
-# View logs
+# View logs  
 sudo journalctl -u wordle-bot -f
 
-# Backup database
+# Backup database  
 pg_dump -h <RDS_HOST> -U wordleadmin -Fc postgres > backup_$(date +%Y%m%d).dump
+```
+
+---
 
 ## 📬 Contributions & Ideas
 Feel free to fork, clone, and suggest improvements via Pull Requests or Issues.
 
 Want to add Charts? Web Dashboard? Voice alerts? Let’s build it! 🎯
 
+---
+
 ## 📜 License
 MIT — free to use, share, and modify.
+
+---
 
 ## 🙏 Acknowledgments
 discord.py
