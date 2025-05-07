@@ -41,12 +41,52 @@ The leaderboard is updated in real time and available via the `/leaderboard` sla
 | 🌐 Networking	    |Amazon VPC + Security Groups | Controls traffic to EC2 & RDS, with locked-down ingress/egress rules |
 | 📈 Monitoring     | CloudWatch               | Tracks logs, resource usage, and sends alerts              |
 | 🔔 Notifications  | SNS (Simple Notification Service) | Sends email/SMS alerts on CPU spikes, DB overload         |
+
+---
+
+
+## 📊 Architecture Diagram
+
+```mermaid
+graph TD
+  Discord[Discord Users]
+  Bot[EC2 Bot - discord py]
+  RDS[Amazon RDS - PostgreSQL]
+  Secrets[AWS Secrets Manager]
+  IAM[IAM Role]
+  CW[CloudWatch Logs and Metrics]
+  SNS[SNS Alerts]
+  VPC[VPC - Private Network]
+
+  Discord --> Bot
+  Bot --> RDS
+  Bot --> Secrets
+  Bot --> CW
+  CW --> SNS
+  IAM --> Bot
+  RDS --> VPC
+```
+
+---
+
+## ⚙️ Tech Stack
+
+| Component           | Tech                                |
+|---------------------|-------------------------------------|
+| Language            | Python 3.9                          |
+| Framework           | discord.py                          |
+| Database            | PostgreSQL 17 on AWS RDS            |
+| Hosting             | AWS EC2 (t2.micro)                  |
+| Secrets             | AWS Secrets Manager                 |
+| Monitoring          | AWS CloudWatch + SNS                |
+| Deployment          | systemd (file lock, PID guard)      |
+
 ---
 
 ## ☁️ AWS Infrastructure Overview
 This project is securely and reliably deployed on Amazon Web Services (AWS) using multiple integrated cloud components. The architecture is designed to support 24/7 uptime, real-time data persistence, secure secrets management, and automatic infrastructure monitoring with alerts.  
 
-## 🔄 EC2 – Compute
+## 💻 EC2 – Compute
 The bot runs on an Amazon EC2 instance (t3.micro) with Amazon Linux 2. It is deployed as a systemd service (wordle-bot.service) and guarded by:
 - File locking + PID tracking to ensure only one instance runs
 - Automatic restarts on failure using systemd’s restart policies
@@ -95,43 +135,6 @@ Whenever a CloudWatch alarm is triggered, a notification is sent through Amazon 
 
 ---
 
-## 📊 Architecture Diagram
-
-```mermaid
-graph TD
-  Discord[Discord Users]
-  Bot[EC2 Bot - discord py]
-  RDS[Amazon RDS - PostgreSQL]
-  Secrets[AWS Secrets Manager]
-  IAM[IAM Role]
-  CW[CloudWatch Logs and Metrics]
-  SNS[SNS Alerts]
-  VPC[VPC - Private Network]
-
-  Discord --> Bot
-  Bot --> RDS
-  Bot --> Secrets
-  Bot --> CW
-  CW --> SNS
-  IAM --> Bot
-  RDS --> VPC
-```
-
----
-
-## ⚙️ Tech Stack
-
-| Component           | Tech                                |
-|---------------------|-------------------------------------|
-| Language            | Python 3.9                          |
-| Framework           | discord.py                          |
-| Database            | PostgreSQL 17 on AWS RDS            |
-| Hosting             | AWS EC2 (t2.micro)                  |
-| Secrets             | AWS Secrets Manager                 |
-| Monitoring          | AWS CloudWatch + SNS                |
-| Deployment          | systemd (file lock, PID guard)      |
-
----
 ## 🧠 Bot Logic
 
 - Scores are stored as:
