@@ -46,7 +46,7 @@ The leaderboard is updated in real time and available via the `/leaderboard` sla
 ---
 
 
-## 📊 Architecture Diagram
+## 📊 Architecture
 
 ```mermaid
 graph TD
