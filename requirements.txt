@@ -1,0 +1,5 @@
+discord.py>=2.0
+asyncpg
+boto3
+python-dotenv
+psutil
