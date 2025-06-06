@@ -1,11 +1,10 @@
 import boto3
 import json
-import os
-from config import AWS_REGION, RDS_SECRET_ARN
+from config import RDS_SECRET_ARN
 
-def get_db_secret():
+def get_rds_credentials():
     session = boto3.session.Session()
-    client = session.client("secretsmanager", region_name=AWS_REGION)
+    client = session.client('secretsmanager', region_name='eu-central-1')
     response = client.get_secret_value(SecretId=RDS_SECRET_ARN)
     secret = json.loads(response['SecretString'])
-    return secret
+    return secret['username'], secret['password']

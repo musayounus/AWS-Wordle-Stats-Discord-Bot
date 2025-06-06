@@ -1,4 +1,4 @@
-discord.py>=2.0
+discord.py
 asyncpg
 boto3
 python-dotenv
