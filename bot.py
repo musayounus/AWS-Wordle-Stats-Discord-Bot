@@ -36,8 +36,10 @@ COGS_LIST = [
     "cogs.leaderboard",
     "cogs.streaks",
     "cogs.help",
-    "cogs.predictions",   # if you have this cog for scheduled predictions
+    "cogs.predictions",
     "cogs.events",
+    "cogs.crowns",
+    "cogs.uncontended_crowns",  # newly added
 ]
 
 # Intents
