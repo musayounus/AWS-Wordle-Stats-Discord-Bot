@@ -1,3 +1,7 @@
+import re
+import discord
+import datetime
+
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
     if not wordles:
@@ -9,9 +13,6 @@ def calculate_streak(wordles):
         else:
             break
     return streak
-
-import re
-import datetime
 
 async def parse_wordle_message(bot, message):
     match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content, re.IGNORECASE)
@@ -45,12 +46,14 @@ async def parse_wordle_message(bot, message):
 async def parse_summary_message(bot, message):
     if "Here are yesterday's results:" not in message.content:
         return
+
     summary_lines = message.content.strip().splitlines()
     date = message.created_at.date() - datetime.timedelta(days=1)
     wordle_start = datetime.date(2021, 6, 19)
     wordle_number = (date - wordle_start).days
     summary_pattern = re.compile(r"(\d|X)/6:\s+(.*)")
     results = []
+    crown_holders = []
 
     for line in summary_lines:
         match = summary_pattern.search(line)
@@ -71,12 +74,24 @@ async def parse_summary_message(bot, message):
             if mentions:
                 for user in mentions:
                     if f"@{user.display_name}" in line or f"<@{user.id}>" in line:
+                        crown_holders.append(user.id)
                         async with bot.pg_pool.acquire() as conn:
                             await conn.execute("""
                                 INSERT INTO crowns (user_id, username, wordle_number, date)
                                 VALUES ($1, $2, $3, $4)
                                 ON CONFLICT DO NOTHING
                             """, user.id, user.display_name, wordle_number, date)
+
+    # 🥇 Uncontended crown logic — only one crown holder
+    if len(crown_holders) == 1:
+        only_user_id = crown_holders[0]
+        async with bot.pg_pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO uncontended_crowns (user_id, count)
+                VALUES ($1, 1)
+                ON CONFLICT (user_id) DO UPDATE
+                SET count = uncontended_crowns.count + 1
+            """, only_user_id)
 
     async with bot.pg_pool.acquire() as conn:
         for user_id, username, attempts in results:
@@ -97,6 +112,7 @@ async def parse_summary_message(bot, message):
                 await message.channel.send(f"This rat <@{user_id}> got it in **1/6**... LOSAH CHEATED 100%!!")
             elif previous_best is None or (attempts is not None and attempts < previous_best):
                 await message.channel.send(f"Flippin <@{user_id}> just beat their personal best with **{attempts}/6**. Good Job Brev 👍")
+
     # Auto-post leaderboard after summary
     from utils.leaderboard import generate_leaderboard_embed
     embed = await generate_leaderboard_embed(bot)
