@@ -12,20 +12,27 @@ class EventsCog(commands.Cog):
         if message.author.bot:
             return
 
-        # Check if the author is an admin in the guild
-        if message.guild:
-            member = message.guild.get_member(message.author.id)
-            if not member.guild_permissions.administrator:
-                return  # Not an admin — ignore the message
-        else:
-            return  # Message not from a guild (e.g., DM) — ignore
+        # Check if the message is in a guild
+        if not message.guild:
+            return  # Ignore DMs
 
-        # Process Wordle score messages
-        if "Wordle" in message.content:
+        # Check if the message might be a Wordle score or a summary
+        is_wordle = "Wordle" in message.content
+        is_summary = "Here are yesterday's results:" in message.content
+
+        if not is_wordle and not is_summary:
+            return  # Not a message we care about
+
+        # Check admin permissions
+        member = message.guild.get_member(message.author.id)
+        if not member.guild_permissions.administrator:
+            await message.reply("❌ Only admins can post Wordle scores or summary messages.")
+            return
+
+        # Process messages from admins
+        if is_wordle:
             await parse_wordle_message(self.bot, message)
-
-        # Process daily summary messages
-        elif "Here are yesterday's results:" in message.content:
+        elif is_summary:
             await parse_summary_message(self.bot, message)
 
 # Load the cog
