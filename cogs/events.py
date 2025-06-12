@@ -8,17 +8,26 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Ignore bot's own messages
+        # Ignore messages sent by bots
         if message.author.bot:
             return
 
-        # Check for Wordle score message
+        # Check if the author is an admin in the guild
+        if message.guild:
+            member = message.guild.get_member(message.author.id)
+            if not member.guild_permissions.administrator:
+                return  # Not an admin — ignore the message
+        else:
+            return  # Message not from a guild (e.g., DM) — ignore
+
+        # Process Wordle score messages
         if "Wordle" in message.content:
             await parse_wordle_message(self.bot, message)
 
-        # Check for summary message
+        # Process daily summary messages
         elif "Here are yesterday's results:" in message.content:
             await parse_summary_message(self.bot, message)
 
+# Load the cog
 async def setup(bot):
     await bot.add_cog(EventsCog(bot))
