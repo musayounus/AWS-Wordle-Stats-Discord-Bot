@@ -11,7 +11,7 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="resetleaderboard", description="Reset the Wordle leaderboard")
+    @app_commands.command(name="reset_leaderboard", description="Reset the Wordle leaderboard")
     @app_commands.checks.has_permissions(administrator=True)
     async def resetleaderboard(self, interaction: discord.Interaction):
         await interaction.response.send_message(
@@ -31,7 +31,7 @@ class AdminCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Reset failed: {e}")
 
-    @app_commands.command(name="banuser", description="Ban a user from leaderboard and stats")
+    @app_commands.command(name="ban_user", description="Ban a user from leaderboard and stats")
     @app_commands.describe(user="User to ban")
     @app_commands.checks.has_permissions(administrator=True)
     async def banuser(self, interaction: discord.Interaction, user: discord.User):
@@ -46,7 +46,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
 
-    @app_commands.command(name="unbanuser", description="Unban a previously banned user")
+    @app_commands.command(name="unban_user", description="Unban a previously banned user")
     @app_commands.describe(user="User to unban")
     @app_commands.checks.has_permissions(administrator=True)
     async def unbanuser(self, interaction: discord.Interaction, user: discord.User):
@@ -57,7 +57,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
 
-    @app_commands.command(name="removescores", description="Remove multiple Wordle scores from a user")
+    @app_commands.command(name="remove_scores", description="Remove multiple Wordle scores from a user")
     @app_commands.describe(
         user="User to remove scores for",
         wordle_numbers="Comma-separated Wordle numbers (e.g. 123,124,125)"

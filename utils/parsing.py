@@ -1,3 +1,7 @@
+import re
+import discord
+import datetime
+
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
     if not wordles:
@@ -10,9 +14,6 @@ def calculate_streak(wordles):
             break
     return streak
 
-import re
-import discord
-import datetime
 
 async def parse_wordle_message(bot, message):
     match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content, re.IGNORECASE)

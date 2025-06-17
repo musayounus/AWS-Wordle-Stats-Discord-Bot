@@ -8,30 +8,21 @@ class CrownsCog(commands.Cog):
 
     @app_commands.command(name="crowns", description="Show how many times each user placed #1 (👑)")
     async def crowns(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
-            rows = await conn.fetch("""
-                SELECT user_id, COUNT(*) AS crown_count
+            records = await conn.fetch("""
+                SELECT user_id, MAX(username) AS display_name, COUNT(*) AS crown_count
                 FROM crowns
                 GROUP BY user_id
                 ORDER BY crown_count DESC
-                LIMIT 10
             """)
-        if not rows:
-            await interaction.response.send_message("👑 No crown data available yet.")
+        if not records:
+            await interaction.followup.send("👑 No crown data yet.")
             return
-
-        desc = ""
-        for i, r in enumerate(rows, 1):
-            member = interaction.guild.get_member(r["user_id"])
-            name = member.display_name if member else f"User ID {r['user_id']}"
-            desc += f"**{i}.** 👑 {name} — `{r['crown_count']}`\n"
-
-        embed = discord.Embed(
-            title="👑 Crowns 👑",
-            description=desc,
-            color=discord.Color.gold()
-        )
-        await interaction.response.send_message(embed=embed)
+        embed = discord.Embed(title="👑 Crown Leaderboard 👑", color=0xf1c40f)
+        for idx, row in enumerate(records, start=1):
+            embed.add_field(name=f"#{idx} {row['display_name']}", value=f"{row['crown_count']} Crowns 👑", inline=False)
+        await interaction.followup.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(CrownsCog(bot))

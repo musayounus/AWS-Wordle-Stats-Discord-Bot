@@ -6,7 +6,7 @@ class UncontendedCrownsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="uncontended_crowns", description="Show the uncontended crowns leaderboard.")
+    @app_commands.command(name="uncontended", description="Show the uncontended crowns leaderboard.")
     async def uncontended_crowns(self, interaction: discord.Interaction):
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
