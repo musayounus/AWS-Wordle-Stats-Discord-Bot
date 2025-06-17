@@ -13,7 +13,7 @@ class UncontendedCrownsCog(commands.Cog):
                 SELECT user_id, count FROM uncontended_crowns ORDER BY count DESC LIMIT 10
             """)
             if not rows:
-                await interaction.response.send_message("No uncontended crown data available yet.")
+                await interaction.response.send_message("🥇 No uncontended crown data available yet.")
                 return
 
             leaderboard = ""
@@ -23,7 +23,7 @@ class UncontendedCrownsCog(commands.Cog):
                 leaderboard += f"**{i}.** 🥇 {name} — `{row['count']}`\n"
 
             embed = discord.Embed(
-                title="🥇 Uncontended Crowns Leaderboard 🥇",
+                title="🥇 Uncontended Crowns 🥇",
                 description=leaderboard,
                 color=discord.Color.gold()
             )

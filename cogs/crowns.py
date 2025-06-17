@@ -17,7 +17,7 @@ class CrownsCog(commands.Cog):
                 LIMIT 10
             """)
         if not rows:
-            await interaction.response.send_message("👑 No crown data yet.")
+            await interaction.response.send_message("👑 No crown data available yet.")
             return
 
         desc = ""
@@ -27,7 +27,7 @@ class CrownsCog(commands.Cog):
             desc += f"**{i}.** 👑 {name} — `{r['crown_count']}`\n"
 
         embed = discord.Embed(
-            title="👑 Crown Leaderboard 👑",
+            title="👑 Crowns 👑",
             description=desc,
             color=discord.Color.gold()
         )
