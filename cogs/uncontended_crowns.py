@@ -23,7 +23,7 @@ class UncontendedCrownsCog(commands.Cog):
                 leaderboard += f"**{i}.** 🥇 {name} — `{row['count']}`\n"
 
             embed = discord.Embed(
-                title="🥇 Uncontended Crowns Leaderboard",
+                title="🥇 Uncontended Crowns Leaderboard 🥇",
                 description=leaderboard,
                 color=discord.Color.gold()
             )
