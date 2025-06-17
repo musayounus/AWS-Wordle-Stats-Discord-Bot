@@ -3,19 +3,17 @@ import sys
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-import asyncio
 
-# For debugging: prevent duplicate bot instances (optional)
+# prevent duplicate runs
 import psutil
 def is_bot_already_running():
     current_pid = os.getpid()
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+    for proc in psutil.process_iter(['pid','name','cmdline']):
         try:
             if proc.info['pid'] == current_pid:
                 continue
-            if ('python' in proc.info['name'].lower() and
-                proc.info['cmdline'] and
-                'bot.py' in ' '.join(proc.info['cmdline'])):
+            cmd = proc.info['cmdline']
+            if proc.info['name'] and 'python' in proc.info['name'].lower() and cmd and 'bot.py' in ' '.join(cmd):
                 return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -25,56 +23,47 @@ if is_bot_already_running():
     print("⛔ Another bot instance is already running. Exiting.")
     sys.exit(1)
 
-# Load environment variables from .env
+# Load .env early (for TOKEN, AWS_REGION, RDS_*, etc)
 load_dotenv()
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
-# Configurable (set your IDs here or import from config.py)
-TEST_GUILD_ID = 1364244767201955910
-COGS_LIST = [
-    "cogs.admin",
-    "cogs.leaderboard",
-    "cogs.paginated_leaderboard",
-    "cogs.streaks",
-    "cogs.help",
-    "cogs.predictions",
-    "cogs.events",
-    "cogs.crowns",
-    "cogs.uncontended_crowns",
-]
-
-# Intents
-intents = discord.Intents.default()
-intents.messages = True
-intents.message_content = True
-intents.guilds = True
-intents.members = True
+# Central config
+import config
 
 # Bot instance
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=config.INTENTS)
 
-# DB Pool setup (using asyncpg & boto3 in db/pool.py)
+# Database pool
 from db.pool import create_db_pool
 
 @bot.event
 async def setup_hook():
-    # Create PostgreSQL connection pool and attach to bot
+    # 1) Connect to RDS
     bot.pg_pool = await create_db_pool()
     print("✅ Database pool initialized.")
 
-    # Load all cogs
+    # 2) Load all cogs
+    COGS_LIST = [
+        "cogs.admin",
+        "cogs.leaderboard",
+        "cogs.streaks",
+        "cogs.help",
+        "cogs.predictions",
+        "cogs.events",
+        "cogs.crowns",
+        "cogs.uncontended_crowns",
+    ]
     for cog in COGS_LIST:
         try:
             await bot.load_extension(cog)
             print(f"✅ Loaded cog: {cog}")
         except Exception as e:
-            print(f"❌ Failed to load cog {cog}: {e}")
+            print(f"❌ Failed loading {cog}: {e}")
 
-    # Sync slash commands (globally and to test guild)
+    # 3) Sync slash commands globally & to test guild
     try:
         await bot.tree.sync()
-        await bot.tree.sync(guild=discord.Object(id=TEST_GUILD_ID))
-        print("✅ Slash commands synced (global & test guild).")
+        await bot.tree.sync(guild=discord.Object(id=config.TEST_GUILD_ID))
+        print("✅ Slash commands synced.")
     except Exception as e:
         print(f"⚠️ Error syncing slash commands: {e}")
 
@@ -82,14 +71,13 @@ async def setup_hook():
 async def on_ready():
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
 
-# Error handler for uncaught exceptions
 @bot.event
 async def on_error(event_method, *args, **kwargs):
     import traceback
-    print(f"❌ Unhandled error in {event_method}:", traceback.format_exc())
+    print(f"❌ Unhandled error in {event_method}:\n{traceback.format_exc()}")
 
 if __name__ == "__main__":
     try:
-        bot.run(TOKEN)
+        bot.run(config.TOKEN)
     except Exception as e:
         print(f"❌ Error starting bot: {e}")

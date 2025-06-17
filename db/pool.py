@@ -10,11 +10,12 @@ async def create_db_pool():
         database=RDS_DBNAME,
         host=RDS_HOST,
         port=RDS_PORT,
-        ssl='require',
+        ssl="require",
         min_size=1,
         max_size=5,
         timeout=10
     )
+    # verify connectivity
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
     return pool
