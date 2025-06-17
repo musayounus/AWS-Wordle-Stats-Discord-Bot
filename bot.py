@@ -34,12 +34,13 @@ TEST_GUILD_ID = 1364244767201955910
 COGS_LIST = [
     "cogs.admin",
     "cogs.leaderboard",
+    "cogs.paginated_leaderboard",
     "cogs.streaks",
     "cogs.help",
     "cogs.predictions",
     "cogs.events",
     "cogs.crowns",
-    "cogs.uncontended_crowns",  # newly added
+    "cogs.uncontended_crowns",
 ]
 
 # Intents

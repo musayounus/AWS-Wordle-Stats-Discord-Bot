@@ -25,7 +25,7 @@ class HelpCog(commands.Cog):
                 "/streak – Show your current streak\n"
                 "/streaks – View top 10 current streaks\n"
                 "/crowns – See how many 👑 crowns each user has\n"
-                "/uncontended_crowns – See how many 🥇 uncontested crowns each user has"
+                "/uncontended – See how many 🥇 uncontested crowns each user has"
             ),
             inline=False
         )
@@ -49,17 +49,17 @@ class HelpCog(commands.Cog):
             name="🛠️ Admin Tools",
             value=(
                 "/import – Bulk import historical Wordle messages\n"
-                "/resetleaderboard – Reset all scores, crowns, uncontended crowns\n"
-                "/removescores – Remove specific scores for a user\n"
-                "/banuser – Ban a user from appearing in stats/leaderboard\n"
-                "/unbanuser – Unban a previously banned user\n"
+                "/reset_leaderboard – Reset all scores, crowns, uncontended crowns\n"
+                "/remove_scores – Remove specific scores for a user\n"
+                "/ban_user – Ban a user from appearing in stats/leaderboard\n"
+                "/unban_user – Unban a previously banned user\n"
                 "/set_uncontended_crowns – Set a user’s uncontested crown count\n"
                 "/adjust_crowns – Add or remove raw crown events for a user"
             ),
             inline=False
         )
 
-        embed.set_footer(text="Good luck, and happy Wordling! 👍")
+        embed.set_footer(text="Good luck Brev 👍")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
