@@ -1,5 +1,3 @@
-# All DB operations for the bot
-
 async def insert_score(conn, user_id, username, wordle_number, date, attempts):
     await conn.execute("""
         INSERT INTO scores (user_id, username, wordle_number, date, attempts)
