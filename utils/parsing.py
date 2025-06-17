@@ -1,7 +1,3 @@
-import re
-import discord
-import datetime
-
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
     if not wordles:
@@ -13,6 +9,10 @@ def calculate_streak(wordles):
         else:
             break
     return streak
+
+import re
+import discord
+import datetime
 
 async def parse_wordle_message(bot, message):
     match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content, re.IGNORECASE)
@@ -46,14 +46,12 @@ async def parse_wordle_message(bot, message):
 async def parse_summary_message(bot, message):
     if "Here are yesterday's results:" not in message.content:
         return
-
     summary_lines = message.content.strip().splitlines()
     date = message.created_at.date() - datetime.timedelta(days=1)
     wordle_start = datetime.date(2021, 6, 19)
     wordle_number = (date - wordle_start).days
     summary_pattern = re.compile(r"(\d|X)/6:\s+(.*)")
     results = []
-    crown_holders = []
 
     for line in summary_lines:
         match = summary_pattern.search(line)
@@ -68,13 +66,14 @@ async def parse_summary_message(bot, message):
                         results.append((user.id, user.display_name, attempts))
 
     # 👑 Crown tracking
+    crown_holders = []
     for line in summary_lines:
         if line.startswith("👑"):
             mentions = message.mentions
             if mentions:
                 for user in mentions:
                     if f"@{user.display_name}" in line or f"<@{user.id}>" in line:
-                        crown_holders.append(user.id)
+                        crown_holders.append((user.id, user.display_name))
                         async with bot.pg_pool.acquire() as conn:
                             await conn.execute("""
                                 INSERT INTO crowns (user_id, username, wordle_number, date)
@@ -82,16 +81,15 @@ async def parse_summary_message(bot, message):
                                 ON CONFLICT DO NOTHING
                             """, user.id, user.display_name, wordle_number, date)
 
-    # 🥇 Uncontended crown logic — only one crown holder
+    # ✅ Uncontended crown tracking
     if len(crown_holders) == 1:
-        only_user_id = crown_holders[0]
+        user_id, username = crown_holders[0]
         async with bot.pg_pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO uncontended_crowns (user_id, count)
                 VALUES ($1, 1)
-                ON CONFLICT (user_id) DO UPDATE
-                SET count = uncontended_crowns.count + 1
-            """, only_user_id)
+                ON CONFLICT (user_id) DO UPDATE SET count = uncontended_crowns.count + 1
+            """, user_id)
 
     async with bot.pg_pool.acquire() as conn:
         for user_id, username, attempts in results:
@@ -107,7 +105,6 @@ async def parse_summary_message(bot, message):
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (username, wordle_number) DO NOTHING
             """, user_id, username, wordle_number, date, attempts)
-            # Celebrations
             if attempts == 1:
                 await message.channel.send(f"This rat <@{user_id}> got it in **1/6**... LOSAH CHEATED 100%!!")
             elif previous_best is None or (attempts is not None and attempts < previous_best):
