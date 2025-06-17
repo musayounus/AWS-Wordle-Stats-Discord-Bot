@@ -19,6 +19,7 @@ class AdminCog(commands.Cog):
             async with self.bot.pg_pool.acquire() as conn:
                 await conn.execute("DELETE FROM scores")
                 await conn.execute("DELETE FROM crowns")
+                await conn.execute("DELETE FROM uncontended_crowns")
             await interaction.followup.send("✅ Leaderboard reset.")
         except asyncio.TimeoutError:
             await interaction.followup.send("❌ Reset cancelled.")
