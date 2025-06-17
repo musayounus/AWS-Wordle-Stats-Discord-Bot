@@ -6,9 +6,9 @@ class UncontendedCrownsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="uncontended_crowns", description="Show uncontended crown leaderboard.")
+    @app_commands.command(name="uncontended_crowns", description="Show uncontended crown leaderboard.")
     async def uncontended_crowns(self, interaction: discord.Interaction):
-        async with self.bot.db_pool.acquire() as conn:
+        async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT user_id, count FROM uncontended_crowns ORDER BY count DESC LIMIT 10
             """)
@@ -25,7 +25,7 @@ class UncontendedCrownsCog(commands.Cog):
             embed = discord.Embed(
                 title="Uncontended Crowns Leaderboard",
                 description=description,
-                color=0xFFD700
+                color=0x1ABC9C
             )
             await interaction.response.send_message(embed=embed)
 
