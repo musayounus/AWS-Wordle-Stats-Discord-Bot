@@ -1,3 +1,5 @@
+# cogs/admin.py
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -102,7 +104,7 @@ class AdminCog(commands.Cog):
         async for message in channel.history(limit=None, oldest_first=True):
             content = message.content
 
-            # --- direct Wordle #### X/6 ---
+            # Direct manual submissions
             m = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', content, re.IGNORECASE)
             if m:
                 if message.author.bot or message.author.display_name.lower() in ("wordle bot", "wordle"):
@@ -123,14 +125,13 @@ class AdminCog(commands.Cog):
                         pass
                 continue
 
-            # --- summary messages ---
+            # Summary messages
             if "Here are yesterday's results:" in content:
                 date = message.created_at.date() - datetime.timedelta(days=1)
                 wn = (date - wordle_start).days
                 lines = content.strip().splitlines()
                 pattern = re.compile(r"(\d|X)/6:\s+(.*)")
 
-                # collect results
                 results = []
                 for line in lines:
                     mm = pattern.search(line)
@@ -142,7 +143,7 @@ class AdminCog(commands.Cog):
                             if f"@{user.display_name}" in section or f"<@{user.id}>" in section:
                                 results.append((user.id, user.display_name, attempts))
 
-                # insert scores & count
+                # Insert scores
                 async with self.bot.pg_pool.acquire() as conn:
                     for uid, uname, att in results:
                         try:
@@ -155,7 +156,7 @@ class AdminCog(commands.Cog):
                         except:
                             pass
 
-                # crowns
+                # Crowns
                 best = min((r[2] for r in results if r[2] is not None), default=None)
                 top_users = [(uid, uname) for uid, uname, a in results if a == best]
                 async with self.bot.pg_pool.acquire() as conn:
@@ -170,7 +171,7 @@ class AdminCog(commands.Cog):
                         except:
                             pass
 
-                    # uncontended crowns: only one top user
+                    # Uncontended crowns
                     if len(top_users) == 1:
                         try:
                             await conn.execute("""
@@ -188,12 +189,97 @@ class AdminCog(commands.Cog):
             f"{crown_count} crowns assigned, {uc_count} uncontended crowns assigned."
         )
 
-        # cleanup imported bot messages
+        # Cleanup
         async with self.bot.pg_pool.acquire() as conn:
             await conn.execute("""
                 DELETE FROM scores
                 WHERE LOWER(username) IN ('wordle bot', 'wordle')
             """)
+
+    @app_commands.command(
+        name="set_uncontended_crowns",
+        description="(Admin) Set a user's uncontended‐crown count."
+    )
+    @app_commands.describe(
+        user="The user whose uncontended crowns to set.",
+        count="The exact number of uncontended crowns."
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_uncontended_crowns(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        count: int
+    ):
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO uncontended_crowns (user_id, count)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET count = $2
+            """, user.id, count)
+        await interaction.response.send_message(
+            f"🥇 Uncontended crowns for {user.mention} set to {count}.",
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="adjust_crowns",
+        description="(Admin) Add or remove crown events for a user."
+    )
+    @app_commands.describe(
+        user="The user to adjust crowns for.",
+        action="Use 'add' to insert or 'remove' to delete crown events.",
+        wordle_numbers="Comma-separated Wordle numbers."
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def adjust_crowns(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        action: str,
+        wordle_numbers: str
+    ):
+        nums = [int(n.strip()) for n in wordle_numbers.split(",") if n.strip().isdigit()]
+        if not nums:
+            return await interaction.response.send_message(
+                "⚠️ You must supply valid comma-separated Wordle numbers.",
+                ephemeral=True
+            )
+
+        async with self.bot.pg_pool.acquire() as conn:
+            if action.lower() == "add":
+                inserted = 0
+                for wn in nums:
+                    try:
+                        await conn.execute("""
+                            INSERT INTO crowns (user_id, username, wordle_number, date)
+                            VALUES ($1, $2, $3, CURRENT_DATE)
+                            ON CONFLICT DO NOTHING
+                        """, user.id, user.display_name, wn)
+                        inserted += 1
+                    except:
+                        pass
+                await interaction.response.send_message(
+                    f"✅ Added {inserted}/{len(nums)} crown rows for {user.mention}.",
+                    ephemeral=True
+                )
+
+            elif action.lower() == "remove":
+                res = await conn.execute("""
+                    DELETE FROM crowns
+                    WHERE user_id = $1
+                      AND wordle_number = ANY($2)
+                """, user.id, nums)
+                deleted_count = int(res.split()[-1])
+                await interaction.response.send_message(
+                    f"🗑️ Removed {deleted_count} crown rows for {user.mention}.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    "⚠️ Action must be 'add' or 'remove'.",
+                    ephemeral=True
+                )
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
