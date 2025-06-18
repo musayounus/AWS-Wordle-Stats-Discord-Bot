@@ -10,16 +10,17 @@ class FailsCog(commands.Cog):
 
     @app_commands.command(
         name="fails_leaderboard",
-        description="Show the Wordle fails leaderboard (who’s missed Wordle most)"
+        description="Show the Wordle fails leaderboard (who's missed Wordle most)"
     )
     async def fails_leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT user_id,
-                       MAX(username)   AS display_name,
-                       COUNT(*)        AS fail_count
+                       MAX(username) AS display_name,
+                       COUNT(*) AS fail_count
                 FROM fails
+                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
                 GROUP BY user_id
                 ORDER BY fail_count DESC
                 LIMIT 10
