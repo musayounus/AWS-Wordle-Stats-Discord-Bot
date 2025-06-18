@@ -2,24 +2,12 @@ import re
 import datetime
 import discord
 
-def calculate_streak(wordles):
-    wordles = sorted(set(wordles))
-    if not wordles:
-        return 0
-    streak = 1
-    for i in range(len(wordles) - 2, -1, -1):
-        if wordles[i] == wordles[i + 1] - 1:
-            streak += 1
-        else:
-            break
-    return streak
-
 async def parse_wordle_message(bot, message):
     """
     Parses a single manual Wordle entry like "Wordle 1414 3/6" or "Wordle 1414 X/6".
     Only admins may submit; this check lives in events.py.
     """
-    match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content, re.IGNORECASE)
+    match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content or "", re.IGNORECASE)
     if not match:
         return
 
@@ -30,22 +18,32 @@ async def parse_wordle_message(bot, message):
 
     async with bot.pg_pool.acquire() as conn:
         # skip banned users
-        if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", message.author.id):
+        if await conn.fetchval(
+            "SELECT 1 FROM banned_users WHERE user_id = $1",
+            message.author.id
+        ):
             return
 
+        # if it's a successful attempt, fetch previous best BEFORE inserting
+        previous_best = None
+        if attempts is not None:
+            previous_best = await conn.fetchval(
+                "SELECT MIN(attempts) FROM scores WHERE user_id = $1 AND attempts IS NOT NULL",
+                message.author.id
+            )
+
+        # record the score or fail
         if attempts is None:
-            # record fail
             await conn.execute("""
                 INSERT INTO fails (user_id, username, wordle_number, date)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
             """, message.author.id, message.author.display_name, wordle_number, date)
         else:
-            # record successful score
             await conn.execute("""
                 INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                 VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (username, wordle_number) DO NOTHING
+                ON CONFLICT (user_id, wordle_number) DO NOTHING
             """, message.author.id, message.author.display_name, wordle_number, date, attempts)
 
         # Celebrations
@@ -53,15 +51,14 @@ async def parse_wordle_message(bot, message):
             await message.channel.send(
                 f"This rat {message.author.mention} got it in **1/6**... LOSAH CHEATED 100%!!"
             )
-        elif attempts is not None:
-            prev_best = await conn.fetchval(
-                "SELECT MIN(attempts) FROM scores WHERE user_id = $1 AND attempts IS NOT NULL",
-                message.author.id
+        elif attempts is not None and (
+                previous_best is None or attempts < previous_best
+        ):
+            await message.channel.send(
+                f"Flippin {message.author.mention} just beat their personal best "
+                f"with **{attempts}/6**. Good Job Brev 👍"
             )
-            if prev_best is None or attempts < prev_best:
-                await message.channel.send(
-                    f"Flippin {message.author.mention} just beat their personal best with **{attempts}/6**. Good Job Brev 👍"
-                )
+
 
 async def parse_summary_message(bot, message):
     """
@@ -78,9 +75,8 @@ async def parse_summary_message(bot, message):
     wordle_number = (date - wordle_start).days
     pattern = re.compile(r"(\d|X)/6:\s+(.*)")
 
-    results = []   # tuples of (user_obj, attempts)
-
-    # parse each result line
+    # First pass: collect raw entries (user, attempts) in a dict to dedupe
+    summary_map = {}
     for line in lines:
         m = pattern.search(line)
         if not m:
@@ -88,44 +84,38 @@ async def parse_summary_message(bot, message):
 
         raw = m.group(1).upper()
         attempts = None if raw == "X" else int(raw)
-        section = m.group(2).strip()
+        section = m.group(2)
 
-        # Check mentions first
+        # Look for a mention
         for user in message.mentions:
-            if f"@{user.display_name}" in section or f"<@{user.id}>" in section:
-                results.append((user, attempts))
+            if f"<@{user.id}>" in section or f"@{user.display_name}" in section:
+                prev = summary_map.get(user.id)
+                # If we already saw a real score, keep it; if we saw a fail but now have real, overwrite
+                if prev is None or (prev is None and attempts is not None):
+                    summary_map[user.id] = (user, attempts)
                 break
-        else:
-            # Fallback to name matching if no mentions found
-            name_match = re.search(r'@([^\s@]+)', section)
-            if name_match:
-                name = name_match.group(1)
-                user_obj = discord.utils.find(
-                    lambda u: u.display_name == name or u.name == name,
-                    message.guild.members
-                )
-                if user_obj:
-                    results.append((user_obj, attempts))
 
-    if not results:
+    if not summary_map:
         return
 
-    # determine best non-fail score for crowns
-    nonfails = [att for _, att in results if att is not None]
-    best = min(nonfails) if nonfails else None
-    crown_winners = [u for u, att in results if att == best]
+    # Determine crown winners (best non-fail)
+    nonfails = [att for _, att in summary_map.values() if att is not None]
+    best_score = min(nonfails) if nonfails else None
+    crown_winners = [
+        user for user, att in summary_map.values() if att == best_score
+    ]
 
     async with bot.pg_pool.acquire() as conn:
-        for user, att in results:
-            if not isinstance(user, discord.Member):
-                continue
-
+        # Insert scores/fails
+        for user, attempts in summary_map.values():
             # skip banned
-            if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", user.id):
+            if await conn.fetchval(
+                "SELECT 1 FROM banned_users WHERE user_id = $1",
+                user.id
+            ):
                 continue
 
-            # insert fail or score
-            if att is None:
+            if attempts is None:
                 await conn.execute("""
                     INSERT INTO fails (user_id, username, wordle_number, date)
                     VALUES ($1, $2, $3, $4)
@@ -135,29 +125,29 @@ async def parse_summary_message(bot, message):
                 await conn.execute("""
                     INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                     VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (username, wordle_number) DO NOTHING
-                """, user.id, user.display_name, wordle_number, date, att)
+                    ON CONFLICT (user_id, wordle_number) DO NOTHING
+                """, user.id, user.display_name, wordle_number, date, attempts)
 
-        # insert crowns
-        if best is not None:
+        # Insert crowns
+        if best_score is not None:
             for winner in crown_winners:
-                if isinstance(winner, discord.Member):
-                    await conn.execute("""
-                        INSERT INTO crowns (user_id, username, wordle_number, date)
-                        VALUES ($1, $2, $3, $4)
-                        ON CONFLICT DO NOTHING
-                    """, winner.id, winner.display_name, wordle_number, date)
+                await conn.execute("""
+                    INSERT INTO crowns (user_id, username, wordle_number, date)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT DO NOTHING
+                """, winner.id, winner.display_name, wordle_number, date)
 
-        # insert uncontended crowns
-        if len(crown_winners) == 1 and isinstance(crown_winners[0], discord.Member):
+        # Insert uncontended crown
+        if len(crown_winners) == 1:
+            winner = crown_winners[0]
             await conn.execute("""
                 INSERT INTO uncontended_crowns (user_id, count)
                 VALUES ($1, 1)
                 ON CONFLICT (user_id) DO UPDATE
-                SET count = uncontended_crowns.count + 1
-            """, crown_winners[0].id)
+                  SET count = uncontended_crowns.count + 1
+            """, winner.id)
 
-    # send updated leaderboard
+    # Finally, re‑post the updated leaderboard
     from utils.leaderboard import generate_leaderboard_embed
     embed = await generate_leaderboard_embed(bot)
     await message.channel.send(embed=embed)
