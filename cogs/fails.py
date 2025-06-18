@@ -30,13 +30,13 @@ class FailsCog(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="💀 Wordle Fails Leaderboard",
+            title="💀 Wordle Fails Leaderboard 💀",
             color=0xff0000
         )
         for idx, r in enumerate(rows, start=1):
             embed.add_field(
                 name=f"#{idx} {r['display_name']}",
-                value=f"{r['fail_count']} Fails 💀",
+                value=f"{r['fail_count']} Fails 🤣",
                 inline=False
             )
         await interaction.followup.send(embed=embed)

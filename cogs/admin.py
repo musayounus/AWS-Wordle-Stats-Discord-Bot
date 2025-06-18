@@ -23,6 +23,7 @@ class AdminCog(commands.Cog):
                 await conn.execute("DELETE FROM scores")
                 await conn.execute("DELETE FROM crowns")
                 await conn.execute("DELETE FROM uncontended_crowns")
+                await conn.execute("DELETE FROM fails")
             await interaction.followup.send("✅ Leaderboard reset.")
         except asyncio.TimeoutError:
             await interaction.followup.send("❌ Reset cancelled.")
