@@ -5,6 +5,13 @@ async def insert_score(conn, user_id, username, wordle_number, date, attempts):
         ON CONFLICT (user_id, wordle_number) DO NOTHING
     """, user_id, username, wordle_number, date, attempts)
 
+async def insert_fail(conn, user_id, username, wordle_number, date):
+    await conn.execute("""
+        INSERT INTO fails (user_id, username, wordle_number, date)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, wordle_number) DO NOTHING
+    """, user_id, username, wordle_number, date)
+
 async def get_leaderboard(conn, range=None):
     where_clause = "WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
@@ -131,4 +138,15 @@ async def get_user_stats_for_predictions(conn):
         WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)
         GROUP BY user_id, username
         ORDER BY avg_score ASC
+    """)
+
+async def get_fails_leaderboard(conn):
+    return await conn.fetch("""
+        SELECT user_id,
+               MAX(username) AS display_name,
+               COUNT(*)    AS fail_count
+        FROM fails
+        GROUP BY user_id
+        ORDER BY fail_count DESC
+        LIMIT 10
     """)
