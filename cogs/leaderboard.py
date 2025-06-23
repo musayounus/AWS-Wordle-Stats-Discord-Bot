@@ -26,12 +26,11 @@ class LeaderboardCog(commands.Cog):
         target_user = user or interaction.user
 
         async with self.bot.pg_pool.acquire() as conn:
-            # Get combined stats including fails from both tables
+            # Get combined stats from both tables
             stats = await conn.fetchrow("""
                 WITH combined_stats AS (
                     SELECT 
                         user_id,
-                        username,
                         wordle_number,
                         date,
                         attempts
@@ -42,7 +41,6 @@ class LeaderboardCog(commands.Cog):
                     
                     SELECT 
                         user_id,
-                        username,
                         wordle_number,
                         date,
                         NULL AS attempts
@@ -53,13 +51,17 @@ class LeaderboardCog(commands.Cog):
                     COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
                     COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
                     MIN(attempts) AS best_score,
-                    ROUND(AVG(attempts)::numeric, 2) AS avg_score,
+                    CASE 
+                        WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
+                        THEN ROUND(AVG(attempts)::numeric, 2)
+                        ELSE NULL
+                    END AS avg_score,
                     MAX(date) AS last_game
                 FROM combined_stats
                 WHERE user_id NOT IN (SELECT user_id FROM banned_users)
             """, target_user.id)
 
-            # Get wordle numbers for streak calculation (only successful attempts)
+            # Get streak data
             rows = await conn.fetch("""
                 SELECT wordle_number FROM scores
                 WHERE user_id = $1 AND attempts IS NOT NULL
@@ -79,8 +81,12 @@ class LeaderboardCog(commands.Cog):
             title=f"📊 Wordle Stats for {target_user.display_name}",
             color=0x3498db
         )
-        embed.add_field(name="Best Score", value=stats['best_score'] or "—", inline=True)
-        embed.add_field(name="Avg Score", value=stats['avg_score'] or "—", inline=True)
+        
+        avg_score = f"{stats['avg_score']:.2f}" if stats['avg_score'] is not None else "—"
+        best_score = stats['best_score'] or "—"
+        
+        embed.add_field(name="Best Score", value=best_score, inline=True)
+        embed.add_field(name="Avg Score", value=avg_score, inline=True)
         embed.add_field(name="Fails (X/6)", value=stats['fails'], inline=True)
         embed.add_field(name="Games Played", value=stats['games_played'], inline=True)
         embed.add_field(name="Current Streak", value=streak_count, inline=True)

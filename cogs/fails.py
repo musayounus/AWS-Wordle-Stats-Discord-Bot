@@ -59,47 +59,99 @@ class FailsCog(commands.Cog):
         await interaction.response.defer(thinking=True)
         
         async with self.bot.pg_pool.acquire() as conn:
-            # Get current fails count
+            # Get current fails count from both tables
             current_count = await conn.fetchval("""
-                SELECT COUNT(*) FROM fails WHERE user_id = $1
+                SELECT COUNT(*) FROM (
+                    SELECT user_id, wordle_number FROM fails WHERE user_id = $1
+                    UNION
+                    SELECT user_id, wordle_number FROM scores 
+                    WHERE user_id = $1 AND attempts IS NULL
+                ) AS combined_fails
             """, user.id) or 0
 
             difference = count - current_count
 
             if difference > 0:
-                # Add dummy fails
+                # Add dummy fails to both tables
                 for i in range(difference):
-                    dummy_wordle = 99999 - i  # High number to avoid conflicts
+                    dummy_wordle = 99999 - i
                     await conn.execute("""
                         INSERT INTO fails (user_id, username, wordle_number, date)
                         VALUES ($1, $2, $3, $4)
                         ON CONFLICT (user_id, wordle_number) DO NOTHING
                     """, user.id, user.display_name, dummy_wordle, datetime.date.today())
+                    
+                    await conn.execute("""
+                        INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                        VALUES ($1, $2, $3, $4, NULL)
+                        ON CONFLICT (username, wordle_number) DO UPDATE
+                        SET attempts = NULL
+                    """, user.id, user.display_name, dummy_wordle, datetime.date.today())
             elif difference < 0:
-                # Remove oldest fails
+                # Remove oldest fails from both tables
                 await conn.execute("""
                     DELETE FROM fails
-                    WHERE ctid IN (
-                        SELECT ctid FROM fails
+                    WHERE (user_id, wordle_number) IN (
+                        SELECT user_id, wordle_number FROM fails
                         WHERE user_id = $1
                         ORDER BY date ASC
                         LIMIT $2
                     )
                 """, user.id, -difference)
-
-            # Ensure corresponding NULL attempts exist in scores table
-            await conn.execute("""
-                INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                SELECT user_id, username, wordle_number, date, NULL
-                FROM fails
-                WHERE user_id = $1
-                ON CONFLICT (username, wordle_number) DO UPDATE
-                SET attempts = NULL
-            """, user.id)
+                
+                await conn.execute("""
+                    DELETE FROM scores
+                    WHERE (user_id, wordle_number) IN (
+                        SELECT user_id, wordle_number FROM scores
+                        WHERE user_id = $1 AND attempts IS NULL
+                        ORDER BY date ASC
+                        LIMIT $2
+                    )
+                """, user.id, -difference)
 
         await interaction.followup.send(
             f"✅ Set fail count for {user.mention} to {count}."
         )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author == self.bot.user:
+            return
+
+        # Handle summary messages
+        if "Here are yesterday's results:" in message.content:
+            await self.update_fails_from_summary(message)
+
+    async def update_fails_from_summary(self, message: discord.Message):
+        lines = message.content.split('\n')
+        date = message.created_at.date() - datetime.timedelta(days=1)
+        
+        for line in lines:
+            if "X/6:" in line:
+                # Extract user mentions
+                for mention in message.mentions:
+                    if f"@{mention.display_name}" in line or f"<@{mention.id}>" in line:
+                        async with self.bot.pg_pool.acquire() as conn:
+                            # Get the Wordle number for this date
+                            wordle_number = await conn.fetchval("""
+                                SELECT wordle_number FROM scores
+                                WHERE date = $1 LIMIT 1
+                            """, date)
+                            
+                            if wordle_number:
+                                # Record fail in both tables
+                                await conn.execute("""
+                                    INSERT INTO fails (user_id, username, wordle_number, date)
+                                    VALUES ($1, $2, $3, $4)
+                                    ON CONFLICT (user_id, wordle_number) DO NOTHING
+                                """, mention.id, mention.display_name, wordle_number, date)
+                                
+                                await conn.execute("""
+                                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                                    VALUES ($1, $2, $3, $4, NULL)
+                                    ON CONFLICT (username, wordle_number) DO UPDATE
+                                    SET attempts = NULL
+                                """, mention.id, mention.display_name, wordle_number, date)
 
 async def setup(bot):
     await bot.add_cog(FailsCog(bot))
