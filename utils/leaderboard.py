@@ -1,17 +1,17 @@
 import discord
 
 async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
-    where_clause = "WHERE user_id NOT IN (SELECT user_id FROM banned_users)"
+    where_clause = "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
 
     if range == "week":
-        date_filter = "AND date >= CURRENT_DATE - INTERVAL '7 days'"
+        date_filter = "AND s.date >= CURRENT_DATE - INTERVAL '7 days'"
     elif range == "month":
-        date_filter = "AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)"
+        date_filter = "AND date_trunc('month', s.date) = date_trunc('month', CURRENT_DATE)"
 
     async with bot.pg_pool.acquire() as conn:
         try:
-            # Main leaderboard query - now using a single source of truth for fails
+            # Main leaderboard query - fixed ambiguous column references
             leaderboard_rows = await conn.fetch(f"""
                 SELECT 
                     s.user_id, 
@@ -28,7 +28,8 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
                 LEFT JOIN (
                     SELECT user_id, COUNT(*) AS fail_count 
                     FROM fails 
-                    {where_clause} {date_filter}
+                    WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+                    {date_filter.replace('s.', '')}
                     GROUP BY user_id
                 ) f ON s.user_id = f.user_id
                 {where_clause} {date_filter}
@@ -41,7 +42,7 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
                 LIMIT 10
             """)
 
-            # User rank query
+            # User rank query - fixed ambiguous column references
             user_rank_row = None
             if user_id:
                 user_rank_row = await conn.fetchrow(f"""
@@ -67,7 +68,8 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
                     LEFT JOIN (
                         SELECT user_id, COUNT(*) AS fail_count 
                         FROM fails 
-                        {where_clause} {date_filter}
+                        WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+                        {date_filter.replace('s.', '')}
                         GROUP BY user_id
                     ) f ON s.user_id = f.user_id
                     {where_clause} {date_filter}

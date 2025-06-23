@@ -18,12 +18,12 @@ class FailsCog(commands.Cog):
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
                 SELECT 
-                    user_id,
-                    MAX(username) AS display_name,
+                    f.user_id,
+                    MAX(f.username) AS display_name,
                     COUNT(*) AS fail_count
-                FROM fails
-                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
-                GROUP BY user_id
+                FROM fails f
+                WHERE f.user_id NOT IN (SELECT user_id FROM banned_users)
+                GROUP BY f.user_id
                 ORDER BY fail_count DESC
                 LIMIT 10
             """)

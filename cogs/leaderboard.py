@@ -29,24 +29,25 @@ class LeaderboardCog(commands.Cog):
             # Get stats with fails from single source (fails table)
             stats = await conn.fetchrow("""
                 SELECT
-                    COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+                    COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) AS games_played,
                     COALESCE((
-                        SELECT COUNT(*) FROM fails 
-                        WHERE user_id = $1
+                        SELECT COUNT(*) FROM fails f
+                        WHERE f.user_id = $1
+                        AND f.user_id NOT IN (SELECT user_id FROM banned_users)
                     ), 0) AS fails,
-                    MIN(attempts) AS best_score,
+                    MIN(s.attempts) AS best_score,
                     CASE 
-                        WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                        THEN ROUND(AVG(attempts)::numeric, 2)
+                        WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
+                        THEN ROUND(AVG(s.attempts)::numeric, 2)
                         ELSE NULL
                     END AS avg_score,
                     GREATEST(
                         (SELECT MAX(date) FROM scores WHERE user_id = $1),
                         (SELECT MAX(date) FROM fails WHERE user_id = $1)
                     ) AS last_game
-                FROM scores
-                WHERE user_id = $1
-                AND user_id NOT IN (SELECT user_id FROM banned_users)
+                FROM scores s
+                WHERE s.user_id = $1
+                AND s.user_id NOT IN (SELECT user_id FROM banned_users)
             """, target_user.id)
 
             # Get streak data
