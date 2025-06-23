@@ -17,9 +17,10 @@ class FailsCog(commands.Cog):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT user_id,
-                       MAX(username) AS display_name,
-                       COUNT(*) AS fail_count
+                SELECT 
+                    user_id,
+                    MAX(username) AS display_name,
+                    COUNT(*) AS fail_count
                 FROM fails
                 WHERE user_id NOT IN (SELECT user_id FROM banned_users)
                 GROUP BY user_id
@@ -59,20 +60,15 @@ class FailsCog(commands.Cog):
         await interaction.response.defer(thinking=True)
         
         async with self.bot.pg_pool.acquire() as conn:
-            # Get current fails count from both tables
+            # Get current fails count
             current_count = await conn.fetchval("""
-                SELECT COUNT(*) FROM (
-                    SELECT user_id, wordle_number FROM fails WHERE user_id = $1
-                    UNION
-                    SELECT user_id, wordle_number FROM scores 
-                    WHERE user_id = $1 AND attempts IS NULL
-                ) AS combined_fails
+                SELECT COUNT(*) FROM fails WHERE user_id = $1
             """, user.id) or 0
 
             difference = count - current_count
 
             if difference > 0:
-                # Add dummy fails to both tables
+                # Add dummy fails
                 for i in range(difference):
                     dummy_wordle = 99999 - i
                     await conn.execute("""
@@ -81,6 +77,7 @@ class FailsCog(commands.Cog):
                         ON CONFLICT (user_id, wordle_number) DO NOTHING
                     """, user.id, user.display_name, dummy_wordle, datetime.date.today())
                     
+                    # Ensure corresponding NULL attempt exists in scores
                     await conn.execute("""
                         INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                         VALUES ($1, $2, $3, $4, NULL)
@@ -102,8 +99,8 @@ class FailsCog(commands.Cog):
                 await conn.execute("""
                     DELETE FROM scores
                     WHERE (user_id, wordle_number) IN (
-                        SELECT user_id, wordle_number FROM scores
-                        WHERE user_id = $1 AND attempts IS NULL
+                        SELECT user_id, wordle_number FROM fails
+                        WHERE user_id = $1
                         ORDER BY date ASC
                         LIMIT $2
                     )

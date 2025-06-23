@@ -11,45 +11,31 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
 
     async with bot.pg_pool.acquire() as conn:
         try:
-            # Main leaderboard query combining scores and fails
+            # Main leaderboard query - now using a single source of truth for fails
             leaderboard_rows = await conn.fetch(f"""
-                WITH combined_data AS (
-                    SELECT 
-                        user_id,
-                        username,
-                        wordle_number,
-                        date,
-                        attempts
-                    FROM scores
-                    {where_clause} {date_filter}
-                    
-                    UNION ALL
-                    
-                    SELECT 
-                        user_id,
-                        username,
-                        wordle_number,
-                        date,
-                        NULL AS attempts
-                    FROM fails
-                    {where_clause} {date_filter}
-                )
                 SELECT 
-                    user_id, 
-                    MAX(username) AS username,
-                    COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-                    COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-                    MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+                    s.user_id, 
+                    MAX(s.username) AS username,
+                    COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) AS games_played,
+                    COALESCE(f.fail_count, 0) AS fails,
+                    MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
                     CASE 
-                        WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                        THEN ROUND(AVG(attempts)::numeric, 2)
+                        WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
+                        THEN ROUND(AVG(s.attempts)::numeric, 2)
                         ELSE NULL
                     END AS avg_attempts
-                FROM combined_data
-                GROUP BY user_id
+                FROM scores s
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) AS fail_count 
+                    FROM fails 
+                    {where_clause} {date_filter}
+                    GROUP BY user_id
+                ) f ON s.user_id = f.user_id
+                {where_clause} {date_filter}
+                GROUP BY s.user_id, f.fail_count
                 ORDER BY 
-                    CASE WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                         THEN ROUND(AVG(attempts)::numeric, 2)
+                    CASE WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
+                         THEN ROUND(AVG(s.attempts)::numeric, 2)
                          ELSE 999 END ASC,
                     games_played DESC
                 LIMIT 10
@@ -59,48 +45,34 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
             user_rank_row = None
             if user_id:
                 user_rank_row = await conn.fetchrow(f"""
-                    WITH combined_data AS (
-                        SELECT 
-                            user_id,
-                            username,
-                            wordle_number,
-                            date,
-                            attempts
-                        FROM scores
-                        {where_clause} {date_filter}
-                        
-                        UNION ALL
-                        
-                        SELECT 
-                            user_id,
-                            username,
-                            wordle_number,
-                            date,
-                            NULL AS attempts
-                        FROM fails
-                        {where_clause} {date_filter}
-                    )
                     SELECT 
-                        user_id, 
-                        MAX(username) AS username,
-                        COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-                        COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-                        MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+                        s.user_id, 
+                        MAX(s.username) AS username,
+                        COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) AS games_played,
+                        COALESCE(f.fail_count, 0) AS fails,
+                        MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
                         CASE 
-                            WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                            THEN ROUND(AVG(attempts)::numeric, 2)
+                            WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
+                            THEN ROUND(AVG(s.attempts)::numeric, 2)
                             ELSE NULL
                         END AS avg_attempts,
                         RANK() OVER (
                             ORDER BY 
-                                CASE WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                                     THEN ROUND(AVG(attempts)::numeric, 2)
+                                CASE WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
+                                     THEN ROUND(AVG(s.attempts)::numeric, 2)
                                      ELSE 999 END,
-                                COUNT(*) FILTER (WHERE attempts IS NOT NULL) DESC
+                                COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) DESC
                         ) AS rank
-                    FROM combined_data
-                    GROUP BY user_id
-                    HAVING user_id = $1
+                    FROM scores s
+                    LEFT JOIN (
+                        SELECT user_id, COUNT(*) AS fail_count 
+                        FROM fails 
+                        {where_clause} {date_filter}
+                        GROUP BY user_id
+                    ) f ON s.user_id = f.user_id
+                    {where_clause} {date_filter}
+                    GROUP BY s.user_id, f.fail_count
+                    HAVING s.user_id = $1
                 """, user_id)
         except Exception as e:
             print(f"Error generating leaderboard: {e}")

@@ -26,39 +26,27 @@ class LeaderboardCog(commands.Cog):
         target_user = user or interaction.user
 
         async with self.bot.pg_pool.acquire() as conn:
-            # Get combined stats from both tables
+            # Get stats with fails from single source (fails table)
             stats = await conn.fetchrow("""
-                WITH combined_stats AS (
-                    SELECT 
-                        user_id,
-                        wordle_number,
-                        date,
-                        attempts
-                    FROM scores
-                    WHERE user_id = $1
-                    
-                    UNION ALL
-                    
-                    SELECT 
-                        user_id,
-                        wordle_number,
-                        date,
-                        NULL AS attempts
-                    FROM fails
-                    WHERE user_id = $1
-                )
                 SELECT
                     COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-                    COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+                    COALESCE((
+                        SELECT COUNT(*) FROM fails 
+                        WHERE user_id = $1
+                    ), 0) AS fails,
                     MIN(attempts) AS best_score,
                     CASE 
                         WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
                         THEN ROUND(AVG(attempts)::numeric, 2)
                         ELSE NULL
                     END AS avg_score,
-                    MAX(date) AS last_game
-                FROM combined_stats
-                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+                    GREATEST(
+                        (SELECT MAX(date) FROM scores WHERE user_id = $1),
+                        (SELECT MAX(date) FROM fails WHERE user_id = $1)
+                    ) AS last_game
+                FROM scores
+                WHERE user_id = $1
+                AND user_id NOT IN (SELECT user_id FROM banned_users)
             """, target_user.id)
 
             # Get streak data
