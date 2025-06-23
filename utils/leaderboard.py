@@ -1,7 +1,7 @@
 import discord
 
 async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
-    where_clause = "WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)"
+    where_clause = "WHERE user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
 
     if range == "week":
@@ -10,31 +10,81 @@ async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
         date_filter = "AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)"
 
     async with bot.pg_pool.acquire() as conn:
+        # Main leaderboard query combining scores and fails
         leaderboard_rows = await conn.fetch(f"""
-            SELECT user_id, username,
-                   COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-                   COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-                   MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-                   ROUND(AVG(attempts)::numeric, 2) AS avg_attempts
-            FROM scores
-            {where_clause} {date_filter}
-            GROUP BY user_id, username
+            WITH combined_data AS (
+                SELECT 
+                    user_id,
+                    username,
+                    wordle_number,
+                    date,
+                    attempts
+                FROM scores
+                {where_clause} {date_filter}
+                
+                UNION ALL
+                
+                SELECT 
+                    user_id,
+                    username,
+                    wordle_number,
+                    date,
+                    NULL AS attempts
+                FROM fails
+                {where_clause} {date_filter}
+            )
+            SELECT 
+                user_id, 
+                MAX(username) AS username,
+                COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+                COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+                MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+                ROUND(AVG(attempts)::numeric, 2) AS avg_attempts
+            FROM combined_data
+            GROUP BY user_id
             ORDER BY avg_attempts ASC, games_played DESC
             LIMIT 10
         """)
 
+        # User rank query
         user_rank_row = None
         if user_id:
             user_rank_row = await conn.fetchrow(f"""
-                SELECT user_id, username,
-                       COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-                       COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-                       MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-                       ROUND(AVG(attempts)::numeric, 2) AS avg_attempts,
-                       RANK() OVER (ORDER BY ROUND(AVG(attempts)::numeric, 2), COUNT(*) FILTER (WHERE attempts IS NOT NULL) DESC) AS rank
-                FROM scores
-                {where_clause} {date_filter}
-                GROUP BY user_id, username
+                WITH combined_data AS (
+                    SELECT 
+                        user_id,
+                        username,
+                        wordle_number,
+                        date,
+                        attempts
+                    FROM scores
+                    {where_clause} {date_filter}
+                    
+                    UNION ALL
+                    
+                    SELECT 
+                        user_id,
+                        username,
+                        wordle_number,
+                        date,
+                        NULL AS attempts
+                    FROM fails
+                    {where_clause} {date_filter}
+                )
+                SELECT 
+                    user_id, 
+                    MAX(username) AS username,
+                    COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+                    COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+                    MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+                    ROUND(AVG(attempts)::numeric, 2) AS avg_attempts,
+                    RANK() OVER (
+                        ORDER BY 
+                            ROUND(AVG(attempts)::numeric, 2), 
+                            COUNT(*) FILTER (WHERE attempts IS NOT NULL) DESC
+                    ) AS rank
+                FROM combined_data
+                GROUP BY user_id
                 HAVING user_id = $1
             """, user_id)
 

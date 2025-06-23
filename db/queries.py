@@ -2,7 +2,8 @@ async def insert_score(conn, user_id, username, wordle_number, date, attempts):
     await conn.execute("""
         INSERT INTO scores (user_id, username, wordle_number, date, attempts)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (user_id, wordle_number) DO NOTHING
+        ON CONFLICT (username, wordle_number) DO UPDATE
+        SET attempts = $5
     """, user_id, username, wordle_number, date, attempts)
 
 async def insert_fail(conn, user_id, username, wordle_number, date):
@@ -11,50 +12,136 @@ async def insert_fail(conn, user_id, username, wordle_number, date):
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (user_id, wordle_number) DO NOTHING
     """, user_id, username, wordle_number, date)
+    
+    await conn.execute("""
+        INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+        VALUES ($1, $2, $3, $4, NULL)
+        ON CONFLICT (username, wordle_number) DO UPDATE
+        SET attempts = NULL
+    """, user_id, username, wordle_number, date)
 
 async def get_leaderboard(conn, range=None):
-    where_clause = "WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)"
+    where_clause = "WHERE user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
     if range == "week":
         date_filter = "AND date >= CURRENT_DATE - INTERVAL '7 days'"
     elif range == "month":
         date_filter = "AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)"
 
-    sql = f"""
-        SELECT user_id, username,
-               COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-               COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-               MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-               ROUND(AVG(attempts)::numeric, 2) AS avg_attempts
-        FROM scores
-        {where_clause} {date_filter}
-        GROUP BY user_id, username
+    return await conn.fetch(f"""
+        WITH combined_data AS (
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                attempts
+            FROM scores
+            {where_clause} {date_filter}
+            
+            UNION ALL
+            
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                NULL AS attempts
+            FROM fails
+            {where_clause} {date_filter}
+        )
+        SELECT 
+            user_id, 
+            MAX(username) AS username,
+            COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+            COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+            MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+            ROUND(AVG(attempts)::numeric, 2) AS avg_attempts
+        FROM combined_data
+        GROUP BY user_id
         ORDER BY avg_attempts ASC, games_played DESC
         LIMIT 10
-    """
-    return await conn.fetch(sql)
+    """)
 
 async def get_user_rank_row(conn, user_id, range=None):
-    where_clause = "WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)"
+    where_clause = "WHERE user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
     if range == "week":
         date_filter = "AND date >= CURRENT_DATE - INTERVAL '7 days'"
     elif range == "month":
         date_filter = "AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)"
 
-    sql = f"""
-        SELECT user_id, username,
-               COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
-               COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
-               MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-               ROUND(AVG(attempts)::numeric, 2) AS avg_attempts,
-               RANK() OVER (ORDER BY ROUND(AVG(attempts)::numeric, 2), COUNT(*) FILTER (WHERE attempts IS NOT NULL) DESC) AS rank
-        FROM scores
-        {where_clause} {date_filter}
-        GROUP BY user_id, username
+    return await conn.fetchrow(f"""
+        WITH combined_data AS (
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                attempts
+            FROM scores
+            {where_clause} {date_filter}
+            
+            UNION ALL
+            
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                NULL AS attempts
+            FROM fails
+            {where_clause} {date_filter}
+        )
+        SELECT 
+            user_id, 
+            MAX(username) AS username,
+            COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+            COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+            MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
+            ROUND(AVG(attempts)::numeric, 2) AS avg_attempts,
+            RANK() OVER (
+                ORDER BY 
+                    ROUND(AVG(attempts)::numeric, 2), 
+                    COUNT(*) FILTER (WHERE attempts IS NOT NULL) DESC
+            ) AS rank
+        FROM combined_data
+        GROUP BY user_id
         HAVING user_id = $1
-    """
-    return await conn.fetchrow(sql, user_id)
+    """, user_id)
+
+async def get_stats(conn, user_id):
+    return await conn.fetchrow("""
+        WITH combined_stats AS (
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                attempts
+            FROM scores
+            WHERE user_id = $1
+            
+            UNION ALL
+            
+            SELECT 
+                user_id,
+                username,
+                wordle_number,
+                date,
+                NULL AS attempts
+            FROM fails
+            WHERE user_id = $1
+        )
+        SELECT
+            COUNT(*) FILTER (WHERE attempts IS NOT NULL) AS games_played,
+            COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+            MIN(attempts) AS best_score,
+            ROUND(AVG(attempts)::numeric, 2) AS avg_score,
+            MAX(date) AS last_game
+        FROM combined_stats
+        WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+    """, user_id)
 
 async def is_user_banned(conn, user_id):
     return await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", user_id)

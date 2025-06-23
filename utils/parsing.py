@@ -1,7 +1,6 @@
 import re
 import datetime
 import discord
-from discord.ext import commands
 
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
@@ -30,20 +29,28 @@ async def parse_wordle_message(bot, message):
         if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", message.author.id):
             return
 
-        # Handle fails (X/6)
         if attempts is None:
+            # Record fail in both tables for consistency
             await conn.execute("""
                 INSERT INTO fails (user_id, username, wordle_number, date)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
             """, message.author.id, message.author.display_name, wordle_number, date)
+            
+            await conn.execute("""
+                INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                VALUES ($1, $2, $3, $4, NULL)
+                ON CONFLICT (username, wordle_number) DO UPDATE
+                SET attempts = NULL
+            """, message.author.id, message.author.display_name, wordle_number, date)
             return
 
-        # Insert score
+        # Record successful attempt
         await conn.execute("""
             INSERT INTO scores (user_id, username, wordle_number, date, attempts)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (username, wordle_number) DO NOTHING
+            ON CONFLICT (username, wordle_number) DO UPDATE
+            SET attempts = $5
         """, message.author.id, message.author.display_name, wordle_number, date, attempts)
 
         # Get all previous scores for personal best calculation
@@ -107,18 +114,26 @@ async def parse_summary_message(bot, message):
                 continue
 
             if attempts is None:
-                # Record fail
+                # Record fail in both tables
                 await conn.execute("""
                     INSERT INTO fails (user_id, username, wordle_number, date)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT (user_id, wordle_number) DO NOTHING
                 """, user_id, username, wordle_number, date)
+                
+                await conn.execute("""
+                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                    VALUES ($1, $2, $3, $4, NULL)
+                    ON CONFLICT (username, wordle_number) DO UPDATE
+                    SET attempts = NULL
+                """, user_id, username, wordle_number, date)
             else:
-                # Record score
+                # Record successful attempt
                 await conn.execute("""
                     INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                     VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (username, wordle_number) DO NOTHING
+                    ON CONFLICT (username, wordle_number) DO UPDATE
+                    SET attempts = $5
                 """, user_id, username, wordle_number, date, attempts)
 
                 # Get previous best for personal best notification
