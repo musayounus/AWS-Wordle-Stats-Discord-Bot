@@ -26,31 +26,24 @@ class LeaderboardCog(commands.Cog):
         target_user = user or interaction.user
 
         async with self.bot.pg_pool.acquire() as conn:
-            # Get stats with fails from single source (fails table)
+            # Get stats - games_played now includes both successes and fails
             stats = await conn.fetchrow("""
                 SELECT
-                    COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) AS games_played,
-                    COALESCE((
-                        SELECT COUNT(*) FROM fails f
-                        WHERE f.user_id = $1
-                        AND f.user_id NOT IN (SELECT user_id FROM banned_users)
-                    ), 0) AS fails,
-                    MIN(s.attempts) AS best_score,
+                    COUNT(*) AS games_played,
+                    COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
+                    MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
                     CASE 
-                        WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
-                        THEN ROUND(AVG(s.attempts)::numeric, 2)
+                        WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
+                        THEN ROUND(AVG(attempts)::numeric, 2)
                         ELSE NULL
                     END AS avg_score,
-                    GREATEST(
-                        (SELECT MAX(date) FROM scores WHERE user_id = $1),
-                        (SELECT MAX(date) FROM fails WHERE user_id = $1)
-                    ) AS last_game
-                FROM scores s
-                WHERE s.user_id = $1
-                AND s.user_id NOT IN (SELECT user_id FROM banned_users)
+                    MAX(date) AS last_game
+                FROM scores
+                WHERE user_id = $1
+                AND user_id NOT IN (SELECT user_id FROM banned_users)
             """, target_user.id)
 
-            # Get streak data
+            # Get streak data (only successful attempts)
             rows = await conn.fetch("""
                 SELECT wordle_number FROM scores
                 WHERE user_id = $1 AND attempts IS NOT NULL
@@ -60,7 +53,7 @@ class LeaderboardCog(commands.Cog):
 
         streak_count = calculate_streak([r["wordle_number"] for r in rows])
 
-        if not stats or (stats['games_played'] == 0 and stats['fails'] == 0):
+        if not stats or stats['games_played'] == 0:
             await interaction.followup.send(
                 f"ℹ️ No Wordle scores found for {target_user.display_name}."
             )

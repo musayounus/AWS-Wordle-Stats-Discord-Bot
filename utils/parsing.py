@@ -29,23 +29,7 @@ async def parse_wordle_message(bot, message):
         if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", message.author.id):
             return
 
-        if attempts is None:
-            # Record fail in both tables
-            await conn.execute("""
-                INSERT INTO fails (user_id, username, wordle_number, date)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (user_id, wordle_number) DO NOTHING
-            """, message.author.id, message.author.display_name, wordle_number, date)
-            
-            await conn.execute("""
-                INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                VALUES ($1, $2, $3, $4, NULL)
-                ON CONFLICT (username, wordle_number) DO UPDATE
-                SET attempts = NULL
-            """, message.author.id, message.author.display_name, wordle_number, date)
-            return
-
-        # Record successful attempt
+        # Always record in scores table (whether success or fail)
         await conn.execute("""
             INSERT INTO scores (user_id, username, wordle_number, date, attempts)
             VALUES ($1, $2, $3, $4, $5)
@@ -53,22 +37,25 @@ async def parse_wordle_message(bot, message):
             SET attempts = $5
         """, message.author.id, message.author.display_name, wordle_number, date, attempts)
 
-        # Get all previous scores for personal best calculation
-        previous_scores = await conn.fetch("""
-            SELECT attempts FROM scores 
+        # For fails, also record in fails table
+        if attempts is None:
+            await conn.execute("""
+                INSERT INTO fails (user_id, username, wordle_number, date)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, wordle_number) DO NOTHING
+            """, message.author.id, message.author.display_name, wordle_number, date)
+            return
+
+        # Only check for personal best if it was a successful attempt
+        previous_best = await conn.fetchval("""
+            SELECT MIN(attempts) FROM scores
             WHERE user_id = $1 AND attempts IS NOT NULL AND wordle_number != $2
         """, message.author.id, wordle_number)
 
         # Handle 1/6 case
         if attempts == 1:
             await message.channel.send(f"This rat {message.author.mention} got it in **1/6**... LOSAH CHEATED 100%!!")
-            return
-
-        # Calculate personal best
-        previous_best = min([r['attempts'] for r in previous_scores]) if previous_scores else None
-        current_is_new_best = previous_best is None or attempts < previous_best
-
-        if current_is_new_best:
+        elif previous_best is None or attempts < previous_best:
             await message.channel.send(
                 f"Flippin {message.author.mention} just beat their personal best with **{attempts}/6**. Good Job Brev 👍"
             )
@@ -113,30 +100,23 @@ async def parse_summary_message(bot, message):
             if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", user_id):
                 continue
 
+            # Always record in scores table
+            await conn.execute("""
+                INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (username, wordle_number) DO UPDATE
+                SET attempts = $5
+            """, user_id, username, wordle_number, date, attempts)
+
+            # For fails, also record in fails table
             if attempts is None:
-                # Record fail in both tables
                 await conn.execute("""
                     INSERT INTO fails (user_id, username, wordle_number, date)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT (user_id, wordle_number) DO NOTHING
                 """, user_id, username, wordle_number, date)
-                
-                await conn.execute("""
-                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                    VALUES ($1, $2, $3, $4, NULL)
-                    ON CONFLICT (username, wordle_number) DO UPDATE
-                    SET attempts = NULL
-                """, user_id, username, wordle_number, date)
             else:
-                # Record successful attempt
-                await conn.execute("""
-                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                    VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (username, wordle_number) DO UPDATE
-                    SET attempts = $5
-                """, user_id, username, wordle_number, date, attempts)
-
-                # Get previous best for personal best notification
+                # Only check for personal best if it was a successful attempt
                 previous_best = await conn.fetchval("""
                     SELECT MIN(attempts) FROM scores
                     WHERE user_id = $1 AND attempts IS NOT NULL AND wordle_number != $2
@@ -145,7 +125,6 @@ async def parse_summary_message(bot, message):
                 # Handle 1/6 case
                 if attempts == 1:
                     await message.channel.send(f"This rat <@{user_id}> got it in **1/6**... LOSAH CHEATED 100%!!")
-                # Handle personal best case
                 elif previous_best is None or attempts < previous_best:
                     await message.channel.send(
                         f"Flippin <@{user_id}> just beat their personal best with **{attempts}/6**. Good Job Brev 👍"
