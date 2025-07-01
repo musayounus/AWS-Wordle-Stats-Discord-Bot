@@ -25,7 +25,13 @@ class LeaderboardCog(commands.Cog):
         await interaction.response.defer(thinking=True)
         target_user = user or interaction.user
 
+        # Check if user is banned
         async with self.bot.pg_pool.acquire() as conn:
+            is_banned = await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", target_user.id)
+            if is_banned:
+                await interaction.followup.send("⛔ This user is banned from leaderboards.")
+                return
+
             # Get stats - games_played now includes both successes and fails
             stats = await conn.fetchrow("""
                 SELECT

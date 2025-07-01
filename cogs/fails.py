@@ -128,7 +128,11 @@ class FailsCog(commands.Cog):
                 # Extract user mentions
                 for mention in message.mentions:
                     if f"@{mention.display_name}" in line or f"<@{mention.id}>" in line:
+                        # Skip banned users
                         async with self.bot.pg_pool.acquire() as conn:
+                            if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", mention.id):
+                                continue
+                            
                             # Get the Wordle number for this date
                             wordle_number = await conn.fetchval("""
                                 SELECT wordle_number FROM scores

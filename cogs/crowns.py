@@ -13,6 +13,7 @@ class CrownsCog(commands.Cog):
             records = await conn.fetch("""
                 SELECT user_id, MAX(username) AS display_name, COUNT(*) AS crown_count
                 FROM crowns
+                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
                 GROUP BY user_id
                 ORDER BY crown_count DESC
             """)
@@ -21,7 +22,11 @@ class CrownsCog(commands.Cog):
             return
         embed = discord.Embed(title="👑 Crown Leaderboard 👑", color=0xf1c40f)
         for idx, row in enumerate(records, start=1):
-            embed.add_field(name=f"#{idx} {row['display_name']}", value=f"{row['crown_count']} Crowns 👑", inline=False)
+            embed.add_field(
+                name=f"#{idx} {row['display_name']}", 
+                value=f"{row['crown_count']} Crowns 👑", 
+                inline=False
+            )
         await interaction.followup.send(embed=embed)
 
 async def setup(bot):
