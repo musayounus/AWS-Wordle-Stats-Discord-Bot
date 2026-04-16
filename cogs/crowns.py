@@ -3,6 +3,8 @@ from discord import app_commands
 from discord.ext import commands
 
 class CrownsCog(commands.Cog):
+    """Crown leaderboard showing first-place finishes."""
+
     def __init__(self, bot):
         self.bot = bot
 

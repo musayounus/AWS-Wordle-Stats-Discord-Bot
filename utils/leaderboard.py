@@ -1,6 +1,6 @@
 import discord
 
-async def generate_leaderboard_embed(bot, user_id=None, range: str = None):
+async def generate_leaderboard_embed(bot, user_id=None, range=None):
     where_clause = "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
 

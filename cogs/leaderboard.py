@@ -5,6 +5,8 @@ from utils.leaderboard import generate_leaderboard_embed
 from utils.parsing import calculate_streak
 
 class LeaderboardCog(commands.Cog):
+    """Leaderboard display and personal stats commands."""
+
     def __init__(self, bot):
         self.bot = bot
 

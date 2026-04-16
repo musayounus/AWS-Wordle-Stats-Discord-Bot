@@ -1,6 +1,6 @@
 import re
 import datetime
-import discord
+
 
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
