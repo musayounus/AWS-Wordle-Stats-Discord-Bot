@@ -59,7 +59,7 @@ class HelpCog(commands.Cog):
             inline=False
         )
 
-        embed.set_footer(text="Good luck Brev 👍")
+        embed.set_footer(text="Good luck 👍")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
