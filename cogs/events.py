@@ -24,13 +24,13 @@ class EventsCog(commands.Cog):
         # --- 2) Official `/share` embed from Wordle Bot ---
         if message.author.bot and message.embeds:
             embed = message.embeds[0]
-            if embed.title and re.search(r"Wordle\s+\d+\s+\d|X/6", embed.title, re.IGNORECASE):
+            if embed.title and re.search(r"Wordle\s+\d+\s+(\d|X)/6", embed.title, re.IGNORECASE):
                 await parse_wordle_message(self.bot, message)
             return
 
         # --- 3) Manual text-based Wordle submissions ---
         # Only allow admins to submit manual Wordle scores
-        if (re.search(r"Wordle\s+\d+\s+\d|X/6", content, re.IGNORECASE) and 
+        if (re.search(r"Wordle\s+\d+\s+(\d|X)/6", content, re.IGNORECASE) and 
             message.author.guild_permissions.administrator):
             await parse_wordle_message(self.bot, message)
             return
