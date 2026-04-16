@@ -3,6 +3,7 @@ from aws.secrets import get_rds_credentials
 from config import RDS_HOST, RDS_DBNAME, RDS_PORT
 
 async def create_db_pool():
+    """Create and return an asyncpg connection pool to RDS."""
     username, password = get_rds_credentials()
     pool = await asyncpg.create_pool(
         user=username,
