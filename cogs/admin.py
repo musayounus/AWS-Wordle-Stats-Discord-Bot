@@ -97,6 +97,7 @@ class AdminCog(commands.Cog):
     async def import_scores(self, interaction: discord.Interaction):
         await interaction.response.send_message("⏳ Scanning channel messages for Wordle scores...")
         count = 0
+        fail_count = 0
         crown_count = 0
         uc_count = 0
         channel = interaction.channel
@@ -122,6 +123,13 @@ class AdminCog(commands.Cog):
                             ON CONFLICT (username, wordle_number) DO NOTHING
                         """, message.author.id, message.author.display_name, wn, date, attempts)
                         count += 1
+                        if attempts is None:
+                            await conn.execute("""
+                                INSERT INTO fails (user_id, username, wordle_number, date)
+                                VALUES ($1, $2, $3, $4)
+                                ON CONFLICT (user_id, wordle_number) DO NOTHING
+                            """, message.author.id, message.author.display_name, wn, date)
+                            fail_count += 1
                     except:
                         pass
                 continue
@@ -144,7 +152,7 @@ class AdminCog(commands.Cog):
                             if f"@{user.display_name}" in section or f"<@{user.id}>" in section:
                                 results.append((user.id, user.display_name, attempts))
 
-                # Insert scores
+                # Insert scores and fails
                 async with self.bot.pg_pool.acquire() as conn:
                     for uid, uname, att in results:
                         try:
@@ -154,6 +162,13 @@ class AdminCog(commands.Cog):
                                 ON CONFLICT (username, wordle_number) DO NOTHING
                             """, uid, uname, wn, date, att)
                             count += 1
+                            if att is None:
+                                await conn.execute("""
+                                    INSERT INTO fails (user_id, username, wordle_number, date)
+                                    VALUES ($1, $2, $3, $4)
+                                    ON CONFLICT (user_id, wordle_number) DO NOTHING
+                                """, uid, uname, wn, date)
+                                fail_count += 1
                         except:
                             pass
 
@@ -172,22 +187,32 @@ class AdminCog(commands.Cog):
                         except:
                             pass
 
-                    # Uncontended crowns
+                    # Uncontended crowns — only increment if crown was actually new
                     if len(top_users) == 1:
-                        try:
-                            await conn.execute("""
-                                INSERT INTO uncontended_crowns (user_id, count)
-                                VALUES ($1, 1)
-                                ON CONFLICT (user_id) DO UPDATE
-                                  SET count = uncontended_crowns.count + 1
-                            """, top_users[0][0])
+                        existing = await conn.fetchval(
+                            "SELECT 1 FROM crowns WHERE user_id = $1 AND wordle_number = $2",
+                            top_users[0][0], wn
+                        )
+                        if existing:
                             uc_count += 1
-                        except:
-                            pass
+
+        # Recalculate uncontended crowns from scratch to avoid double-counting
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute("DELETE FROM uncontended_crowns")
+            await conn.execute("""
+                INSERT INTO uncontended_crowns (user_id, count)
+                SELECT user_id, COUNT(*) FROM crowns
+                WHERE wordle_number IN (
+                    SELECT wordle_number FROM crowns
+                    GROUP BY wordle_number HAVING COUNT(*) = 1
+                )
+                GROUP BY user_id
+                ON CONFLICT (user_id) DO UPDATE SET count = EXCLUDED.count
+            """)
 
         await interaction.followup.send(
-            f"✅ Import complete. {count} scores imported, "
-            f"{crown_count} crowns assigned, {uc_count} uncontended crowns assigned."
+            f"✅ Import complete. {count} scores imported, {fail_count} fails recorded, "
+            f"{crown_count} crowns assigned, {uc_count} uncontended crowns."
         )
 
         # Cleanup
