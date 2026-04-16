@@ -5,6 +5,8 @@ from config import PREDICTION_CHANNEL_ID, PREDICTION_TIME_HOUR
 from db.queries import get_user_stats_for_predictions
 
 class PredictionsCog(commands.Cog):
+    """Posts daily Wordle predictions based on past performance."""
+
     def __init__(self, bot):
         self.bot = bot
         self.daily_prediction_post.start()

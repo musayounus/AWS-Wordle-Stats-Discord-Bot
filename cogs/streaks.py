@@ -4,6 +4,8 @@ from discord.ext import commands
 from utils.parsing import calculate_streak
 
 class StreaksCog(commands.Cog):
+    """Commands for viewing individual and top streaks."""
+
     def __init__(self, bot):
         self.bot = bot
 

@@ -6,6 +6,8 @@ import re
 import asyncio
 
 class AdminCog(commands.Cog):
+    """Admin-only commands for managing scores, bans, crowns, and imports."""
+
     def __init__(self, bot):
         self.bot = bot
 
