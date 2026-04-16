@@ -1,4 +1,3 @@
-# Test comment to verify git and GitHub integration
 import os
 import sys
 import discord
