@@ -1,8 +1,13 @@
 import os
 import sys
+import io
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+
+# Fix Windows console encoding for emoji output
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # prevent duplicate runs
 import psutil
