@@ -54,10 +54,10 @@ async def parse_wordle_message(bot, message):
 
         # Handle 1/6 case
         if attempts == 1:
-            await message.channel.send(f"This rat {message.author.mention} got it in **1/6**... LOSAH CHEATED 100%!!")
+            await message.channel.send(f"This person {message.author.mention} got it in **1/6**... You didn't cheat now, did you?..")
         elif previous_best is None or attempts < previous_best:
             await message.channel.send(
-                f"Flippin {message.author.mention} just beat their personal best with **{attempts}/6**. Good Job Brev 👍"
+                f"{message.author.mention} just beat their personal best with **{attempts}/6**. Good Job 👍"
             )
 
 async def parse_summary_message(bot, message):
@@ -124,10 +124,10 @@ async def parse_summary_message(bot, message):
 
                 # Handle 1/6 case
                 if attempts == 1:
-                    await message.channel.send(f"This rat <@{user_id}> got it in **1/6**... LOSAH CHEATED 100%!!")
+                    await message.channel.send(f"This person <@{user_id}> got it in **1/6**... You didn't cheat now, did you?..")
                 elif previous_best is None or attempts < previous_best:
                     await message.channel.send(
-                        f"Flippin <@{user_id}> just beat their personal best with **{attempts}/6**. Good Job Brev 👍"
+                        f"<@{user_id}> just beat their personal best with **{attempts}/6**. Good Job 👍"
                     )
 
         # Crown processing
