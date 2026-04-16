@@ -2,7 +2,7 @@
 
 Wordle Discord Leaderboard Bot is a fully automated Discord bot built in Python that tracks and ranks Wordle performance among users in a server. It listens for scores posted manually (e.g., `Wordle 1418 4/6`), through the `/share` command from the official Wordle app, and from daily summary messages (e.g., `👑 3/6: @User1 @User2`). All scores are stored in a PostgreSQL database, hosted on AWS RDS and accessed securely using AWS Secrets Manager.
 
-The leaderboard is updated in real time and available via the `/leaderboard` slash command. Admins can reset all scores using `/resetleaderboard`.  
+The leaderboard is updated in real time and available via the `/leaderboard` slash command. Admins can manage scores, bans, and crowns via dedicated slash commands.
 
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RDS-blue)
