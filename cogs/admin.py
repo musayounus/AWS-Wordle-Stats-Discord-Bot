@@ -224,63 +224,57 @@ class AdminCog(commands.Cog):
         )
 
     @app_commands.command(
-        name="adjust_crowns",
-        description="(Admin) Add or remove crown events for a user."
+        name="set_crowns",
+        description="(Admin) Set a user's crown count."
     )
     @app_commands.describe(
-        user="The user to adjust crowns for.",
-        action="Use 'add' to insert or 'remove' to delete crown events.",
-        wordle_numbers="Comma-separated Wordle numbers."
+        user="The user whose crowns to set.",
+        count="The exact number of crowns."
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_crowns(
+    async def set_crowns(
         self,
         interaction: discord.Interaction,
         user: discord.User,
-        action: str,
-        wordle_numbers: str
+        count: int
     ):
-        nums = [int(n.strip()) for n in wordle_numbers.split(",") if n.strip().isdigit()]
-        if not nums:
-            return await interaction.response.send_message(
-                "⚠️ You must supply valid comma-separated Wordle numbers.",
-                ephemeral=True
-            )
+        if count < 0:
+            await interaction.response.send_message("❌ Crown count cannot be negative.", ephemeral=True)
+            return
 
         async with self.bot.pg_pool.acquire() as conn:
-            if action.lower() == "add":
-                inserted = 0
-                for wn in nums:
-                    try:
-                        await conn.execute("""
-                            INSERT INTO crowns (user_id, username, wordle_number, date)
-                            VALUES ($1, $2, $3, CURRENT_DATE)
-                            ON CONFLICT DO NOTHING
-                        """, user.id, user.display_name, wn)
-                        inserted += 1
-                    except:
-                        pass
-                await interaction.response.send_message(
-                    f"✅ Added {inserted}/{len(nums)} crown rows for {user.mention}.",
-                    ephemeral=True
-                )
+            current_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM crowns WHERE user_id = $1", user.id
+            ) or 0
 
-            elif action.lower() == "remove":
-                res = await conn.execute("""
-                    DELETE FROM crowns
+            difference = count - current_count
+
+            if difference > 0:
+                for i in range(difference):
+                    dummy_wordle = 89999 - i
+                    await conn.execute("""
+                        INSERT INTO crowns (user_id, username, wordle_number, date)
+                        VALUES ($1, $2, $3, CURRENT_DATE)
+                        ON CONFLICT DO NOTHING
+                    """, user.id, user.display_name, dummy_wordle)
+            elif difference < 0:
+                to_remove = await conn.fetch("""
+                    SELECT wordle_number FROM crowns
                     WHERE user_id = $1
-                      AND wordle_number = ANY($2)
-                """, user.id, nums)
-                deleted_count = int(res.split()[-1])
-                await interaction.response.send_message(
-                    f"🗑️ Removed {deleted_count} crown rows for {user.mention}.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.response.send_message(
-                    "⚠️ Action must be 'add' or 'remove'.",
-                    ephemeral=True
-                )
+                    ORDER BY date ASC
+                    LIMIT $2
+                """, user.id, -difference)
+                if to_remove:
+                    wn_list = [r['wordle_number'] for r in to_remove]
+                    await conn.execute("""
+                        DELETE FROM crowns
+                        WHERE user_id = $1 AND wordle_number = ANY($2)
+                    """, user.id, wn_list)
+
+        await interaction.response.send_message(
+            f"👑 Crown count for {user.mention} set to {count}.",
+            ephemeral=True
+        )
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))

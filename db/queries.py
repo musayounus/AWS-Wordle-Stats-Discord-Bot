@@ -121,14 +121,3 @@ async def get_all_streak_users(conn):
         FROM scores
         WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)
     """)
-
-async def get_user_stats_for_predictions(conn):
-    return await conn.fetch("""
-        SELECT user_id, username,
-               ROUND(AVG(attempts)::numeric, 2) AS avg_score,
-               COUNT(*) AS games_played
-        FROM scores
-        WHERE attempts IS NOT NULL AND user_id NOT IN (SELECT user_id FROM banned_users)
-        GROUP BY user_id, username
-        ORDER BY avg_score ASC
-    """)

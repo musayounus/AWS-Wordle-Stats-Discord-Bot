@@ -38,8 +38,7 @@ class HelpCog(commands.Cog):
                 "• Parses official `/share` embeds and daily summaries\n"
                 "• Tracks 👑 crowns (first‑place finishes)\n"
                 "• Tracks 🥇 uncontested crowns (solo first‑place)\n"
-                "• Auto‑posts leaderboard after each summary\n"
-                "• Auto‑posts daily predictions based on past averages"
+                "• Auto‑posts leaderboard after each summary"
             ),
             inline=False
         )
@@ -54,7 +53,7 @@ class HelpCog(commands.Cog):
                 "/ban_user – Ban a user from appearing in stats/leaderboard\n"
                 "/unban_user – Unban a previously banned user\n"
                 "/set_uncontended_crowns – Set a user’s uncontested crown count\n"
-                "/adjust_crowns – Add or remove raw crown events for a user"
+                "/set_crowns – Set a user's crown count"
             ),
             inline=False
         )

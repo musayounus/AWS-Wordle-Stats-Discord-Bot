@@ -8,8 +8,6 @@ load_dotenv()
 # ── Discord / Bot settings ────────────────────────────────────────────────────
 TOKEN                = os.getenv("DISCORD_BOT_TOKEN")
 TEST_GUILD_ID        = int(os.getenv("TEST_GUILD_ID", "1364244767201955910"))
-PREDICTION_CHANNEL_ID= int(os.getenv("PREDICTION_CHANNEL_ID", "1364244767201955911"))
-PREDICTION_TIME_HOUR = int(os.getenv("PREDICTION_TIME_HOUR", "11"))
 
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")

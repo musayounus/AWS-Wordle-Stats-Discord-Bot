@@ -53,7 +53,6 @@ async def setup_hook():
         "cogs.leaderboard",
         "cogs.streaks",
         "cogs.help",
-        "cogs.predictions",
         "cogs.events",
         "cogs.crowns",
         "cogs.uncontended_crowns",
