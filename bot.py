@@ -76,7 +76,7 @@ async def setup_hook():
 
 @tasks.loop(minutes=5)
 async def heartbeat():
-    print("💓 Heartbeat: bot is alive")
+    print("💓 Heartbeat: bot is alive", flush=True)
 
 @bot.event
 async def on_ready():
