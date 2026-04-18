@@ -2,7 +2,7 @@ import os
 import sys
 import io
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 # Fix Windows console encoding for emoji output
@@ -74,9 +74,15 @@ async def setup_hook():
     except Exception as e:
         print(f"⚠️ Error syncing slash commands: {e}")
 
+@tasks.loop(minutes=5)
+async def heartbeat():
+    print("💓 Heartbeat: bot is alive")
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+    if not heartbeat.is_running():
+        heartbeat.start()
 
 @bot.event
 async def on_error(event_method, *args, **kwargs):
