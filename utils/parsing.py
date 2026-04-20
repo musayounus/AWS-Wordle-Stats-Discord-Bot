@@ -46,6 +46,12 @@ async def parse_wordle_message(bot, message):
             """, message.author.id, message.author.display_name, wordle_number, date)
             return
 
+        # Success: remove any stale fail row for this (user, wordle) so fails stays in sync
+        await conn.execute(
+            "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+            message.author.id, wordle_number,
+        )
+
         # Only check for personal best if it was a successful attempt
         previous_best = await conn.fetchval("""
             SELECT MIN(attempts) FROM scores
@@ -116,6 +122,11 @@ async def parse_summary_message(bot, message):
                     ON CONFLICT (user_id, wordle_number) DO NOTHING
                 """, user_id, username, wordle_number, date)
             else:
+                # Success: remove any stale fail row so fails stays in sync with scores
+                await conn.execute(
+                    "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+                    user_id, wordle_number,
+                )
                 # Only check for personal best if it was a successful attempt
                 previous_best = await conn.fetchval("""
                     SELECT MIN(attempts) FROM scores

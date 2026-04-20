@@ -210,17 +210,31 @@ class AdminCog(commands.Cog):
                 ON CONFLICT (user_id) DO UPDATE SET count = EXCLUDED.count
             """)
 
-        await interaction.followup.send(
-            f"✅ Import complete. {count} scores imported, {fail_count} fails recorded, "
-            f"{crown_count} crowns assigned, {uc_count} uncontended crowns."
-        )
-
-        # Cleanup
+        # Cleanup and rebuild fails from scores to keep tables consistent
         async with self.bot.pg_pool.acquire() as conn:
             await conn.execute("""
                 DELETE FROM scores
                 WHERE LOWER(username) IN ('wordle bot', 'wordle')
             """)
+            await conn.execute("DELETE FROM fails")
+            await conn.execute("""
+                INSERT INTO fails (user_id, username, wordle_number, date)
+                SELECT DISTINCT ON (user_id, wordle_number)
+                       user_id, username, wordle_number, date
+                FROM scores
+                WHERE attempts IS NULL
+                ORDER BY user_id, wordle_number, date
+            """)
+
+            real_scores = await conn.fetchval("SELECT COUNT(*) FROM scores")
+            real_fails = await conn.fetchval("SELECT COUNT(*) FROM fails")
+            real_crowns = await conn.fetchval("SELECT COUNT(*) FROM crowns")
+            real_uc = await conn.fetchval("SELECT COALESCE(SUM(count), 0) FROM uncontended_crowns")
+
+        await interaction.followup.send(
+            f"✅ Import complete. {real_scores} scores, {real_fails} fails, "
+            f"{real_crowns} crowns, {real_uc} uncontended crowns."
+        )
 
     @app_commands.command(
         name="set_uncontended_crowns",
