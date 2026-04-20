@@ -151,11 +151,12 @@ async def parse_summary_message(bot, message):
 
         # Uncontended crown processing
         if len(crown_users) == 1:
+            solo = crown_users[0]
             await conn.execute("""
-                INSERT INTO uncontended_crowns (user_id, count)
-                VALUES ($1, 1)
-                ON CONFLICT (user_id) DO UPDATE SET count = uncontended_crowns.count + 1
-            """, crown_users[0].id)
+                INSERT INTO uncontended_crowns (user_id, username, wordle_number, date)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, wordle_number) DO NOTHING
+            """, solo.id, solo.display_name, wordle_number, date)
 
     # Send leaderboard update
     from utils.leaderboard import generate_leaderboard_embed

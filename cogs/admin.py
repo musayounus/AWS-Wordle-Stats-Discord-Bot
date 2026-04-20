@@ -196,18 +196,16 @@ class AdminCog(commands.Cog):
                         if existing:
                             uc_count += 1
 
-        # Recalculate uncontended crowns from scratch to avoid double-counting
+        # Rebuild uncontended_crowns from crowns (wordles with exactly one crown)
         async with self.bot.pg_pool.acquire() as conn:
             await conn.execute("DELETE FROM uncontended_crowns")
             await conn.execute("""
-                INSERT INTO uncontended_crowns (user_id, count)
-                SELECT user_id, COUNT(*) FROM crowns
+                INSERT INTO uncontended_crowns (user_id, username, wordle_number, date)
+                SELECT user_id, username, wordle_number, date FROM crowns
                 WHERE wordle_number IN (
                     SELECT wordle_number FROM crowns
                     GROUP BY wordle_number HAVING COUNT(*) = 1
                 )
-                GROUP BY user_id
-                ON CONFLICT (user_id) DO UPDATE SET count = EXCLUDED.count
             """)
 
         # Cleanup and rebuild fails from scores to keep tables consistent
@@ -229,7 +227,7 @@ class AdminCog(commands.Cog):
             real_scores = await conn.fetchval("SELECT COUNT(*) FROM scores")
             real_fails = await conn.fetchval("SELECT COUNT(*) FROM fails")
             real_crowns = await conn.fetchval("SELECT COUNT(*) FROM crowns")
-            real_uc = await conn.fetchval("SELECT COALESCE(SUM(count), 0) FROM uncontended_crowns")
+            real_uc = await conn.fetchval("SELECT COUNT(*) FROM uncontended_crowns")
 
         await interaction.followup.send(
             f"✅ Import complete. {real_scores} scores, {real_fails} fails, "
@@ -251,12 +249,37 @@ class AdminCog(commands.Cog):
         user: discord.User,
         count: int
     ):
+        if count < 0:
+            await interaction.response.send_message("❌ Count cannot be negative.", ephemeral=True)
+            return
+
         async with self.bot.pg_pool.acquire() as conn:
-            await conn.execute("""
-                INSERT INTO uncontended_crowns (user_id, count)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id) DO UPDATE SET count = $2
-            """, user.id, count)
+            current = await conn.fetchval(
+                "SELECT COUNT(*) FROM uncontended_crowns WHERE user_id = $1", user.id
+            ) or 0
+            diff = count - current
+            if diff > 0:
+                for i in range(diff):
+                    dummy_wordle = 79999 - i
+                    await conn.execute("""
+                        INSERT INTO uncontended_crowns (user_id, username, wordle_number, date)
+                        VALUES ($1, $2, $3, CURRENT_DATE)
+                        ON CONFLICT (user_id, wordle_number) DO NOTHING
+                    """, user.id, user.display_name, dummy_wordle)
+            elif diff < 0:
+                to_remove = await conn.fetch("""
+                    SELECT wordle_number FROM uncontended_crowns
+                    WHERE user_id = $1
+                    ORDER BY date ASC
+                    LIMIT $2
+                """, user.id, -diff)
+                if to_remove:
+                    wn_list = [r['wordle_number'] for r in to_remove]
+                    await conn.execute("""
+                        DELETE FROM uncontended_crowns
+                        WHERE user_id = $1 AND wordle_number = ANY($2)
+                    """, user.id, wn_list)
+
         await interaction.response.send_message(
             f"🥇 Uncontended crowns for {user.mention} set to {count}.",
             ephemeral=True

@@ -13,16 +13,11 @@ class UncontendedCrownsCog(commands.Cog):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT uc.user_id, uc.count, MAX(u.username) AS username
-                FROM uncontended_crowns uc
-                LEFT JOIN (
-                    SELECT user_id, MAX(username) AS username 
-                    FROM crowns 
-                    GROUP BY user_id
-                ) u ON uc.user_id = u.user_id
-                WHERE uc.user_id NOT IN (SELECT user_id FROM banned_users)
-                GROUP BY uc.user_id, uc.count
-                ORDER BY uc.count DESC
+                SELECT user_id, MAX(username) AS username, COUNT(*) AS count
+                FROM uncontended_crowns
+                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+                GROUP BY user_id
+                ORDER BY count DESC
                 LIMIT 10
             """)
             
