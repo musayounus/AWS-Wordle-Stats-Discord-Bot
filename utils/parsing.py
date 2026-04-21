@@ -1,6 +1,7 @@
 import re
 import datetime
 
+from utils.admin_helpers import current_wordle_number
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -8,13 +9,17 @@ from utils.user_resolver import (
 )
 
 
-def calculate_streak(wordles):
-    wordles = sorted(set(wordles))
-    if not wordles:
+def calculate_streak(wordles, current_wordle=None):
+    if current_wordle is None:
+        current_wordle = current_wordle_number()
+    valid = sorted({w for w in wordles if w <= current_wordle})
+    if not valid:
+        return 0
+    if valid[-1] < current_wordle - 1:
         return 0
     streak = 1
-    for i in range(len(wordles) - 2, -1, -1):
-        if wordles[i] == wordles[i + 1] - 1:
+    for i in range(len(valid) - 2, -1, -1):
+        if valid[i] == valid[i + 1] - 1:
             streak += 1
         else:
             break
