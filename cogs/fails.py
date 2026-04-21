@@ -1,7 +1,9 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import datetime
+
+from utils.admin_helpers import validate_wordle_number, wordle_date_for_number
+
 
 class FailsCog(commands.Cog):
     """Track and show Wordle fails (X/6)."""
@@ -44,68 +46,71 @@ class FailsCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(
-        name="set_fails",
-        description="[Admin] Set the number of fails for a user"
+        name="adjust_fails",
+        description="Add or remove a fail (X/6) for a user on a specific Wordle",
     )
     @app_commands.describe(
-        user="The user to adjust",
-        count="The new fail count"
+        user="User to adjust",
+        wordle_number="Wordle number",
+        action="add or remove",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="add", value="add"),
+            app_commands.Choice(name="remove", value="remove"),
+        ],
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def set_fails(self, interaction: discord.Interaction, user: discord.User, count: int):
-        if count < 0:
-            await interaction.response.send_message("❌ Fail count cannot be negative.", ephemeral=True)
+    async def adjust_fails(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        wordle_number: int,
+        action: app_commands.Choice[str],
+    ):
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True)
-        
+        date = wordle_date_for_number(wordle_number)
+
         async with self.bot.pg_pool.acquire() as conn:
-            # Get current fails count
-            current_count = await conn.fetchval("""
-                SELECT COUNT(*) FROM fails WHERE user_id = $1
-            """, user.id) or 0
+            if action.value == "add":
+                await conn.execute(
+                    """
+                    INSERT INTO fails (user_id, username, wordle_number, date)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id, wordle_number) DO NOTHING
+                    """,
+                    user.id, user.display_name, wordle_number, date,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                    VALUES ($1, $2, $3, $4, NULL)
+                    ON CONFLICT (username, wordle_number) DO UPDATE
+                    SET attempts = NULL
+                    """,
+                    user.id, user.display_name, wordle_number, date,
+                )
+            else:
+                await conn.execute(
+                    "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+                    user.id, wordle_number,
+                )
+                await conn.execute(
+                    """
+                    DELETE FROM scores
+                    WHERE user_id = $1 AND wordle_number = $2 AND attempts IS NULL
+                    """,
+                    user.id, wordle_number,
+                )
 
-            difference = count - current_count
-
-            if difference > 0:
-                # Add dummy fails
-                for i in range(difference):
-                    dummy_wordle = 99999 - i
-                    await conn.execute("""
-                        INSERT INTO fails (user_id, username, wordle_number, date)
-                        VALUES ($1, $2, $3, $4)
-                        ON CONFLICT (user_id, wordle_number) DO NOTHING
-                    """, user.id, user.display_name, dummy_wordle, datetime.date.today())
-                    
-                    # Ensure corresponding NULL attempt exists in scores
-                    await conn.execute("""
-                        INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                        VALUES ($1, $2, $3, $4, NULL)
-                        ON CONFLICT (username, wordle_number) DO UPDATE
-                        SET attempts = NULL
-                    """, user.id, user.display_name, dummy_wordle, datetime.date.today())
-            elif difference < 0:
-                # Find the oldest fails to remove
-                to_remove = await conn.fetch("""
-                    SELECT user_id, wordle_number FROM fails
-                    WHERE user_id = $1
-                    ORDER BY date ASC
-                    LIMIT $2
-                """, user.id, -difference)
-
-                if to_remove:
-                    wn_list = [r['wordle_number'] for r in to_remove]
-                    await conn.execute("""
-                        DELETE FROM fails
-                        WHERE user_id = $1 AND wordle_number = ANY($2)
-                    """, user.id, wn_list)
-                    await conn.execute("""
-                        DELETE FROM scores
-                        WHERE user_id = $1 AND wordle_number = ANY($2) AND attempts IS NULL
-                    """, user.id, wn_list)
-
-        await interaction.followup.send(
-            f"✅ Set fail count for {user.mention} to {count}."
+        verb = "Added" if action.value == "add" else "Removed"
+        await interaction.response.send_message(
+            f"💀 {verb} fail for {user.mention} on Wordle #{wordle_number}.",
+            ephemeral=True,
         )
 
 async def setup(bot):

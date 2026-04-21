@@ -49,11 +49,11 @@ class HelpCog(commands.Cog):
             value=(
                 "/import – Bulk import historical Wordle messages\n"
                 "/reset_leaderboard – Reset all scores, crowns, uncontended crowns\n"
-                "/remove_scores – Remove specific scores for a user\n"
+                "/adjust_scores – Add/remove a score for a user on a specific Wordle\n"
+                "/adjust_fails – Add/remove a fail for a user on a specific Wordle\n"
+                "/adjust_crowns – Add/remove a crown for a user on a specific Wordle\n"
                 "/ban_user – Ban a user from appearing in stats/leaderboard\n"
-                "/unban_user – Unban a previously banned user\n"
-                "/set_uncontended_crowns – Set a user’s uncontested crown count\n"
-                "/set_crowns – Set a user's crown count"
+                "/unban_user – Unban a previously banned user"
             ),
             inline=False
         )

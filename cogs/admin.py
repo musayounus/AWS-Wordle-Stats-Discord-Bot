@@ -10,6 +10,12 @@ from utils.user_resolver import (
     extract_user_tokens,
     resolve_user,
 )
+from utils.admin_helpers import (
+    sync_uncontended_for_wordle,
+    validate_wordle_number,
+    wordle_date_for_number,
+)
+from typing import Optional
 
 class AdminCog(commands.Cog):
     """Admin-only commands for managing scores, bans, crowns, and imports."""
@@ -64,39 +70,104 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
 
-    @app_commands.command(name="remove_scores", description="Remove multiple Wordle scores from a user")
+    @app_commands.command(
+        name="adjust_scores",
+        description="Add or remove a Wordle score for a user on a specific Wordle",
+    )
     @app_commands.describe(
-        user="User to remove scores for",
-        wordle_numbers="Comma-separated Wordle numbers (e.g. 123,124,125)"
+        user="User to adjust",
+        wordle_number="Wordle number",
+        action="add or remove",
+        attempts="Attempts (1-6 or X for fail) — required when action is add",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="add", value="add"),
+            app_commands.Choice(name="remove", value="remove"),
+        ],
+        attempts=[
+            app_commands.Choice(name="1", value="1"),
+            app_commands.Choice(name="2", value="2"),
+            app_commands.Choice(name="3", value="3"),
+            app_commands.Choice(name="4", value="4"),
+            app_commands.Choice(name="5", value="5"),
+            app_commands.Choice(name="6", value="6"),
+            app_commands.Choice(name="X (fail)", value="X"),
+        ],
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def removescores(self, interaction: discord.Interaction, user: discord.User, wordle_numbers: str):
-        try:
-            numbers = [int(n.strip()) for n in wordle_numbers.split(",") if n.strip().isdigit()]
-            if not numbers:
-                await interaction.response.send_message("⚠️ No valid Wordle numbers provided.", ephemeral=True)
+    async def adjust_scores(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        wordle_number: int,
+        action: app_commands.Choice[str],
+        attempts: Optional[app_commands.Choice[str]] = None,
+    ):
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+            return
+
+        date = wordle_date_for_number(wordle_number)
+
+        if action.value == "add":
+            if attempts is None:
+                await interaction.response.send_message(
+                    "❌ `attempts` is required when action is `add`.", ephemeral=True
+                )
                 return
-
+            attempts_val = None if attempts.value == "X" else int(attempts.value)
             async with self.bot.pg_pool.acquire() as conn:
-                deleted = await conn.fetch("""
-                    DELETE FROM scores
-                    WHERE user_id = $1 AND wordle_number = ANY($2)
-                    RETURNING wordle_number
-                """, user.id, numbers)
+                await conn.execute(
+                    """
+                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (username, wordle_number) DO UPDATE
+                    SET attempts = $5
+                    """,
+                    user.id, user.display_name, wordle_number, date, attempts_val,
+                )
+                if attempts_val is None:
+                    await conn.execute(
+                        """
+                        INSERT INTO fails (user_id, username, wordle_number, date)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (user_id, wordle_number) DO NOTHING
+                        """,
+                        user.id, user.display_name, wordle_number, date,
+                    )
+                else:
+                    await conn.execute(
+                        "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+                        user.id, wordle_number,
+                    )
+            label = "X/6" if attempts_val is None else f"{attempts_val}/6"
+            await interaction.response.send_message(
+                f"✅ Set {user.mention}'s Wordle #{wordle_number} score to **{label}**.",
+                ephemeral=True,
+            )
+            return
 
-            dc = len(deleted)
-            rc = len(numbers)
-            if dc == 0:
-                await interaction.response.send_message(
-                    f"ℹ️ No matching scores found for {user.mention}.", ephemeral=True
-                )
-            else:
-                await interaction.response.send_message(
-                    f"✅ Removed {dc} out of {rc} requested scores for {user.mention}.",
-                    ephemeral=True
-                )
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to remove scores: {e}", ephemeral=True)
+        # remove: nuke score + fail + crown for this (user, wordle), then sync uncontended
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM scores WHERE user_id = $1 AND wordle_number = $2",
+                user.id, wordle_number,
+            )
+            await conn.execute(
+                "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+                user.id, wordle_number,
+            )
+            await conn.execute(
+                "DELETE FROM crowns WHERE user_id = $1 AND wordle_number = $2",
+                user.id, wordle_number,
+            )
+            await sync_uncontended_for_wordle(conn, wordle_number)
+        await interaction.response.send_message(
+            f"🗑️ Removed {user.mention}'s score, fail, and crown for Wordle #{wordle_number}.",
+            ephemeral=True,
+        )
 
     @app_commands.command(name="import", description="Import Wordle scores from past messages in this channel")
     @app_commands.checks.has_permissions(administrator=True)
@@ -263,107 +334,56 @@ class AdminCog(commands.Cog):
         )
 
     @app_commands.command(
-        name="set_uncontended_crowns",
-        description="(Admin) Set a user's uncontended‐crown count."
+        name="adjust_crowns",
+        description="Add or remove a crown for a user on a specific Wordle",
     )
     @app_commands.describe(
-        user="The user whose uncontended crowns to set.",
-        count="The exact number of uncontended crowns."
+        user="User to adjust",
+        wordle_number="Wordle number the crown is for",
+        action="add or remove",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="add", value="add"),
+            app_commands.Choice(name="remove", value="remove"),
+        ],
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def set_uncontended_crowns(
+    async def adjust_crowns(
         self,
         interaction: discord.Interaction,
         user: discord.User,
-        count: int
+        wordle_number: int,
+        action: app_commands.Choice[str],
     ):
-        if count < 0:
-            await interaction.response.send_message("❌ Count cannot be negative.", ephemeral=True)
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
             return
 
-        async with self.bot.pg_pool.acquire() as conn:
-            current = await conn.fetchval(
-                "SELECT COUNT(*) FROM uncontended_crowns WHERE user_id = $1", user.id
-            ) or 0
-            diff = count - current
-            if diff > 0:
-                for i in range(diff):
-                    dummy_wordle = 79999 - i
-                    await conn.execute("""
-                        INSERT INTO uncontended_crowns (user_id, username, wordle_number, date)
-                        VALUES ($1, $2, $3, CURRENT_DATE)
-                        ON CONFLICT (user_id, wordle_number) DO NOTHING
-                    """, user.id, user.display_name, dummy_wordle)
-            elif diff < 0:
-                to_remove = await conn.fetch("""
-                    SELECT wordle_number FROM uncontended_crowns
-                    WHERE user_id = $1
-                    ORDER BY date ASC
-                    LIMIT $2
-                """, user.id, -diff)
-                if to_remove:
-                    wn_list = [r['wordle_number'] for r in to_remove]
-                    await conn.execute("""
-                        DELETE FROM uncontended_crowns
-                        WHERE user_id = $1 AND wordle_number = ANY($2)
-                    """, user.id, wn_list)
-
-        await interaction.response.send_message(
-            f"🥇 Uncontended crowns for {user.mention} set to {count}.",
-            ephemeral=True
-        )
-
-    @app_commands.command(
-        name="set_crowns",
-        description="(Admin) Set a user's crown count."
-    )
-    @app_commands.describe(
-        user="The user whose crowns to set.",
-        count="The exact number of crowns."
-    )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def set_crowns(
-        self,
-        interaction: discord.Interaction,
-        user: discord.User,
-        count: int
-    ):
-        if count < 0:
-            await interaction.response.send_message("❌ Crown count cannot be negative.", ephemeral=True)
-            return
+        date = wordle_date_for_number(wordle_number)
 
         async with self.bot.pg_pool.acquire() as conn:
-            current_count = await conn.fetchval(
-                "SELECT COUNT(*) FROM crowns WHERE user_id = $1", user.id
-            ) or 0
+            if action.value == "add":
+                await conn.execute(
+                    """
+                    INSERT INTO crowns (user_id, username, wordle_number, date)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    user.id, user.display_name, wordle_number, date,
+                )
+            else:
+                await conn.execute(
+                    "DELETE FROM crowns WHERE user_id = $1 AND wordle_number = $2",
+                    user.id, wordle_number,
+                )
+            await sync_uncontended_for_wordle(conn, wordle_number)
 
-            difference = count - current_count
-
-            if difference > 0:
-                for i in range(difference):
-                    dummy_wordle = 89999 - i
-                    await conn.execute("""
-                        INSERT INTO crowns (user_id, username, wordle_number, date)
-                        VALUES ($1, $2, $3, CURRENT_DATE)
-                        ON CONFLICT DO NOTHING
-                    """, user.id, user.display_name, dummy_wordle)
-            elif difference < 0:
-                to_remove = await conn.fetch("""
-                    SELECT wordle_number FROM crowns
-                    WHERE user_id = $1
-                    ORDER BY date ASC
-                    LIMIT $2
-                """, user.id, -difference)
-                if to_remove:
-                    wn_list = [r['wordle_number'] for r in to_remove]
-                    await conn.execute("""
-                        DELETE FROM crowns
-                        WHERE user_id = $1 AND wordle_number = ANY($2)
-                    """, user.id, wn_list)
-
+        verb = "Added" if action.value == "add" else "Removed"
         await interaction.response.send_message(
-            f"👑 Crown count for {user.mention} set to {count}.",
-            ephemeral=True
+            f"👑 {verb} crown for {user.mention} on Wordle #{wordle_number}.",
+            ephemeral=True,
         )
 
 async def setup(bot):
