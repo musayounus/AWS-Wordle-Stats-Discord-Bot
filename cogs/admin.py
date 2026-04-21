@@ -23,18 +23,6 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    adjust_scores = app_commands.Group(
-        name="adjust_scores",
-        description="Add or remove a Wordle score for a user",
-        default_permissions=discord.Permissions(administrator=True),
-    )
-
-    adjust_crowns = app_commands.Group(
-        name="adjust_crowns",
-        description="Add or remove a Wordle crown for a user",
-        default_permissions=discord.Permissions(administrator=True),
-    )
-
     @app_commands.command(name="reset_leaderboard", description="Reset the Wordle leaderboard")
     @app_commands.checks.has_permissions(administrator=True)
     async def resetleaderboard(self, interaction: discord.Interaction):
@@ -82,7 +70,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
 
-    @adjust_scores.command(name="add", description="Add a Wordle score for a user")
+    @app_commands.command(name="add_scores", description="Add a Wordle score for a user")
     @app_commands.describe(
         user="User to adjust",
         wordle_number="Wordle number",
@@ -101,7 +89,7 @@ class AdminCog(commands.Cog):
         ],
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_scores_add(
+    async def add_scores(
         self,
         interaction: discord.Interaction,
         user: discord.User,
@@ -175,10 +163,10 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-    @adjust_scores.command(name="remove", description="Remove a Wordle score for a user")
+    @app_commands.command(name="remove_scores", description="Remove a Wordle score for a user")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_scores_remove(
+    async def remove_scores(
         self,
         interaction: discord.Interaction,
         user: discord.User,
@@ -372,7 +360,7 @@ class AdminCog(commands.Cog):
             f"{real_crowns} crowns, {real_uc} uncontended crowns."
         )
 
-    @adjust_crowns.command(name="add", description="Award a crown to a user for a specific Wordle")
+    @app_commands.command(name="add_crowns", description="Award a crown to a user for a specific Wordle")
     @app_commands.describe(
         user="User to adjust",
         wordle_number="Wordle number the crown is for",
@@ -390,7 +378,7 @@ class AdminCog(commands.Cog):
         ],
     )
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_crowns_add(
+    async def add_crowns(
         self,
         interaction: discord.Interaction,
         user: discord.User,
@@ -463,10 +451,10 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-    @adjust_crowns.command(name="remove", description="Remove a user's crown for a specific Wordle")
+    @app_commands.command(name="remove_crowns", description="Remove a user's crown for a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_crowns_remove(
+    async def remove_crowns(
         self,
         interaction: discord.Interaction,
         user: discord.User,

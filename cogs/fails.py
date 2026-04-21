@@ -11,12 +11,6 @@ class FailsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    adjust_fails = app_commands.Group(
-        name="adjust_fails",
-        description="Add or remove a fail (X/6) for a user on a specific Wordle",
-        default_permissions=discord.Permissions(administrator=True),
-    )
-
     @app_commands.command(
         name="fails_leaderboard",
         description="Show the Wordle fails leaderboard (who's missed Wordle most)"
@@ -51,10 +45,10 @@ class FailsCog(commands.Cog):
             )
         await interaction.followup.send(embed=embed)
 
-    @adjust_fails.command(name="add", description="Add a fail (X/6) for a user on a specific Wordle")
+    @app_commands.command(name="add_fails", description="Add a fail (X/6) for a user on a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_fails_add(
+    async def add_fails(
         self,
         interaction: discord.Interaction,
         user: discord.User,
@@ -91,10 +85,10 @@ class FailsCog(commands.Cog):
             ephemeral=True,
         )
 
-    @adjust_fails.command(name="remove", description="Remove a fail (X/6) for a user on a specific Wordle")
+    @app_commands.command(name="remove_fails", description="Remove a fail (X/6) for a user on a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_fails_remove(
+    async def remove_fails(
         self,
         interaction: discord.Interaction,
         user: discord.User,
