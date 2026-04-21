@@ -2,7 +2,7 @@ import re
 import datetime
 import discord
 from discord.ext import commands
-from utils.parsing import parse_wordle_message, parse_summary_message
+from utils.parsing import parse_wordle_message, parse_summary_message, extract_message_text
 
 class EventsCog(commands.Cog):
     def __init__(self, bot):
@@ -26,8 +26,7 @@ class EventsCog(commands.Cog):
             meta = getattr(message, "interaction_metadata", None) or getattr(message, "interaction", None)
             if meta is None or getattr(meta, "user", None) is None:
                 return
-            candidate = content or (message.embeds[0].title if message.embeds else "") or ""
-            if re.search(r"Wordle\s+\d+\s+(\d|X)/6", candidate, re.IGNORECASE):
+            if re.search(r"Wordle\s+\d+\s+(\d|X)/6", extract_message_text(message), re.IGNORECASE):
                 await parse_wordle_message(self.bot, message)
                 from utils.leaderboard import generate_leaderboard_embed
                 embed = await generate_leaderboard_embed(self.bot)

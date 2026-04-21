@@ -43,8 +43,41 @@ def _get_effective_user(message):
     return user
 
 
+def extract_message_text(message):
+    """Collect a message's displayable text across plain content, embed
+    title/description, and Components V2 trees (Container > Section/TextDisplay).
+    Needed because Components V2 messages (e.g., Wordle APP /share) leave
+    `message.content` empty and carry text inside nested components.
+    """
+    parts = []
+    if message.content:
+        parts.append(message.content)
+    for e in message.embeds:
+        if e.title:
+            parts.append(e.title)
+        if e.description:
+            parts.append(e.description)
+
+    def _walk(c):
+        content = getattr(c, "content", None)
+        if isinstance(content, str) and content:
+            parts.append(content)
+        for attr in ("children", "components"):
+            sub = getattr(c, attr, None)
+            if isinstance(sub, (list, tuple)):
+                for s in sub:
+                    _walk(s)
+        accessory = getattr(c, "accessory", None)
+        if accessory is not None:
+            _walk(accessory)
+
+    for c in getattr(message, "components", None) or []:
+        _walk(c)
+    return "\n".join(parts)
+
+
 async def parse_wordle_message(bot, message):
-    raw_content = message.content or (message.embeds[0].title if message.embeds else "") or ""
+    raw_content = extract_message_text(message)
     match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', raw_content, re.IGNORECASE)
     if not match:
         return
