@@ -204,6 +204,7 @@ class AdminCog(commands.Cog):
         fail_count = 0
         crown_count = 0
         uc_count = 0
+        reject_count = 0
         channel = interaction.channel
         wordle_start = datetime.date(2021, 6, 19)
         import_cache: dict = {}
@@ -217,6 +218,9 @@ class AdminCog(commands.Cog):
                 if message.author.bot or message.author.display_name.lower() in ("wordle bot", "wordle"):
                     continue
                 wn = int(m.group(1))
+                if validate_wordle_number(wn):
+                    reject_count += 1
+                    continue
                 raw = m.group(2).upper()
                 attempts = None if raw == "X" else int(raw)
                 date = message.created_at.date()
@@ -355,10 +359,13 @@ class AdminCog(commands.Cog):
             real_crowns = await conn.fetchval("SELECT COUNT(*) FROM crowns")
             real_uc = await conn.fetchval("SELECT COUNT(*) FROM uncontended_crowns")
 
-        await interaction.followup.send(
+        summary = (
             f"✅ Import complete. {real_scores} scores, {real_fails} fails, "
             f"{real_crowns} crowns, {real_uc} uncontended crowns."
         )
+        if reject_count:
+            summary += f" Rejected {reject_count} out-of-range wordle numbers."
+        await interaction.followup.send(summary)
 
     @app_commands.command(name="add_crowns", description="Award a crown to a user for a specific Wordle")
     @app_commands.describe(

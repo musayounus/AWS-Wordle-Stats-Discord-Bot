@@ -1,7 +1,7 @@
 import re
 import datetime
 
-from utils.admin_helpers import current_wordle_number
+from utils.admin_helpers import current_wordle_number, validate_wordle_number
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -83,6 +83,10 @@ async def parse_wordle_message(bot, message):
         return
 
     wordle_number = int(match.group(1))
+    err = validate_wordle_number(wordle_number)
+    if err:
+        print(f"[parse_wordle_message] rejected wn={wordle_number} from {message.author}: {err}", flush=True)
+        return
     raw = match.group(2).upper()
     attempts = None if raw == "X" else int(raw)
     date = message.created_at.date()
