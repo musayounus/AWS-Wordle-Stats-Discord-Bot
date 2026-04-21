@@ -5,6 +5,12 @@ import datetime
 import re
 import asyncio
 
+from utils.user_resolver import (
+    add_user_to_cache,
+    extract_user_tokens,
+    resolve_user,
+)
+
 class AdminCog(commands.Cog):
     """Admin-only commands for managing scores, bans, crowns, and imports."""
 
@@ -102,6 +108,7 @@ class AdminCog(commands.Cog):
         uc_count = 0
         channel = interaction.channel
         wordle_start = datetime.date(2021, 6, 19)
+        import_cache: dict = {}
 
         async for message in channel.history(limit=None, oldest_first=True):
             content = message.content
@@ -141,19 +148,38 @@ class AdminCog(commands.Cog):
                 lines = content.strip().splitlines()
                 pattern = re.compile(r"(\d|X)/6:\s+(.*)")
 
-                results = []
-                for line in lines:
-                    mm = pattern.search(line)
-                    if mm:
+                async with self.bot.pg_pool.acquire() as conn:
+                    for user in message.mentions:
+                        add_user_to_cache(import_cache, user)
+
+                    results = []
+                    for line in lines:
+                        mm = pattern.search(line)
+                        if not mm:
+                            continue
                         raw = mm.group(1).upper()
                         attempts = None if raw == "X" else int(raw)
                         section = mm.group(2)
-                        for user in message.mentions:
-                            if f"@{user.display_name}" in section or f"<@{user.id}>" in section:
-                                results.append((user.id, user.display_name, attempts))
+                        for token in extract_user_tokens(section):
+                            uid, uname = await resolve_user(
+                                message.guild, token, cache=import_cache, conn=conn
+                            )
+                            if uid is None:
+                                continue
+                            results.append((uid, uname, attempts))
 
-                # Insert scores and fails
-                async with self.bot.pg_pool.acquire() as conn:
+                    crown_tokens = []
+                    for line in lines:
+                        if line.startswith("👑"):
+                            for token in extract_user_tokens(line):
+                                uid, uname = await resolve_user(
+                                    message.guild, token, cache=import_cache, conn=conn
+                                )
+                                if uid is None:
+                                    continue
+                                crown_tokens.append((uid, uname))
+
+                    # Insert scores and fails
                     for uid, uname, att in results:
                         try:
                             await conn.execute("""
@@ -172,10 +198,12 @@ class AdminCog(commands.Cog):
                         except:
                             pass
 
-                # Crowns
-                best = min((r[2] for r in results if r[2] is not None), default=None)
-                top_users = [(uid, uname) for uid, uname, a in results if a == best]
-                async with self.bot.pg_pool.acquire() as conn:
+                    # Crowns: prefer explicit 👑 lines, otherwise fall back to best score
+                    if crown_tokens:
+                        top_users = crown_tokens
+                    else:
+                        best = min((r[2] for r in results if r[2] is not None), default=None)
+                        top_users = [(uid, uname) for uid, uname, a in results if a == best]
                     for uid, uname in top_users:
                         try:
                             await conn.execute("""

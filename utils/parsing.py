@@ -1,6 +1,12 @@
 import re
 import datetime
 
+from utils.user_resolver import (
+    build_cache_from_mentions,
+    extract_user_tokens,
+    resolve_user,
+)
+
 
 def calculate_streak(wordles):
     wordles = sorted(set(wordles))
@@ -75,31 +81,37 @@ async def parse_summary_message(bot, message):
     wordle_start = datetime.date(2021, 6, 19)
     wordle_number = (date - wordle_start).days
     summary_pattern = re.compile(r"(\d|X)/6:\s+(.*)")
-    results = []
 
-    for line in summary_lines:
-        match = summary_pattern.search(line)
-        if match:
+    async with bot.pg_pool.acquire() as conn:
+        cache = build_cache_from_mentions(message)
+
+        results = []
+        for line in summary_lines:
+            match = summary_pattern.search(line)
+            if not match:
+                continue
             raw_attempt = match.group(1)
             attempts = None if raw_attempt.upper() == "X" else int(raw_attempt)
             user_section = match.group(2)
-            mentions = message.mentions
-            if mentions:
-                for user in mentions:
-                    if f"@{user.display_name}" in user_section or f"<@{user.id}>" in user_section:
-                        results.append((user.id, user.display_name, attempts))
+            for token in extract_user_tokens(user_section):
+                uid, uname = await resolve_user(
+                    message.guild, token, cache=cache, conn=conn
+                )
+                if uid is None:
+                    continue
+                results.append((uid, uname, attempts))
 
-    # Crown tracking
-    crown_users = []
-    for line in summary_lines:
-        if line.startswith("👑"):
-            mentions = message.mentions
-            if mentions:
-                for user in mentions:
-                    if f"@{user.display_name}" in line or f"<@{user.id}>" in line:
-                        crown_users.append(user)
+        crown_users = []
+        for line in summary_lines:
+            if line.startswith("👑"):
+                for token in extract_user_tokens(line):
+                    uid, uname = await resolve_user(
+                        message.guild, token, cache=cache, conn=conn
+                    )
+                    if uid is None:
+                        continue
+                    crown_users.append((uid, uname))
 
-    async with bot.pg_pool.acquire() as conn:
         # Process all results
         for user_id, username, attempts in results:
             # Skip banned users
@@ -142,21 +154,21 @@ async def parse_summary_message(bot, message):
                     )
 
         # Crown processing
-        for user in crown_users:
+        for uid, uname in crown_users:
             await conn.execute("""
                 INSERT INTO crowns (user_id, username, wordle_number, date)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT DO NOTHING
-            """, user.id, user.display_name, wordle_number, date)
+            """, uid, uname, wordle_number, date)
 
         # Uncontended crown processing
         if len(crown_users) == 1:
-            solo = crown_users[0]
+            solo_id, solo_name = crown_users[0]
             await conn.execute("""
                 INSERT INTO uncontended_crowns (user_id, username, wordle_number, date)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
-            """, solo.id, solo.display_name, wordle_number, date)
+            """, solo_id, solo_name, wordle_number, date)
 
     # Send leaderboard update
     from utils.leaderboard import generate_leaderboard_embed
