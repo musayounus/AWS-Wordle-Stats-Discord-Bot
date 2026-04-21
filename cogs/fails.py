@@ -11,6 +11,12 @@ class FailsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    adjust_fails = app_commands.Group(
+        name="adjust_fails",
+        description="Add or remove a fail (X/6) for a user on a specific Wordle",
+        default_permissions=discord.Permissions(administrator=True),
+    )
+
     @app_commands.command(
         name="fails_leaderboard",
         description="Show the Wordle fails leaderboard (who's missed Wordle most)"
@@ -45,28 +51,14 @@ class FailsCog(commands.Cog):
             )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(
-        name="adjust_fails",
-        description="Add or remove a fail (X/6) for a user on a specific Wordle",
-    )
-    @app_commands.describe(
-        user="User to adjust",
-        wordle_number="Wordle number",
-        action="add or remove",
-    )
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="add", value="add"),
-            app_commands.Choice(name="remove", value="remove"),
-        ],
-    )
+    @adjust_fails.command(name="add", description="Add a fail (X/6) for a user on a specific Wordle")
+    @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.checks.has_permissions(administrator=True)
-    async def adjust_fails(
+    async def adjust_fails_add(
         self,
         interaction: discord.Interaction,
         user: discord.User,
         wordle_number: int,
-        action: app_commands.Choice[str],
     ):
         err = validate_wordle_number(wordle_number)
         if err:
@@ -76,40 +68,58 @@ class FailsCog(commands.Cog):
         date = wordle_date_for_number(wordle_number)
 
         async with self.bot.pg_pool.acquire() as conn:
-            if action.value == "add":
-                await conn.execute(
-                    """
-                    INSERT INTO fails (user_id, username, wordle_number, date)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (user_id, wordle_number) DO NOTHING
-                    """,
-                    user.id, user.display_name, wordle_number, date,
-                )
-                await conn.execute(
-                    """
-                    INSERT INTO scores (user_id, username, wordle_number, date, attempts)
-                    VALUES ($1, $2, $3, $4, NULL)
-                    ON CONFLICT (username, wordle_number) DO UPDATE
-                    SET attempts = NULL
-                    """,
-                    user.id, user.display_name, wordle_number, date,
-                )
-            else:
-                await conn.execute(
-                    "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
-                    user.id, wordle_number,
-                )
-                await conn.execute(
-                    """
-                    DELETE FROM scores
-                    WHERE user_id = $1 AND wordle_number = $2 AND attempts IS NULL
-                    """,
-                    user.id, wordle_number,
-                )
+            await conn.execute(
+                """
+                INSERT INTO fails (user_id, username, wordle_number, date)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, wordle_number) DO NOTHING
+                """,
+                user.id, user.display_name, wordle_number, date,
+            )
+            await conn.execute(
+                """
+                INSERT INTO scores (user_id, username, wordle_number, date, attempts)
+                VALUES ($1, $2, $3, $4, NULL)
+                ON CONFLICT (username, wordle_number) DO UPDATE
+                SET attempts = NULL
+                """,
+                user.id, user.display_name, wordle_number, date,
+            )
 
-        verb = "Added" if action.value == "add" else "Removed"
         await interaction.response.send_message(
-            f"💀 {verb} fail for {user.mention} on Wordle #{wordle_number}.",
+            f"💀 Added fail for {user.mention} on Wordle #{wordle_number}.",
+            ephemeral=True,
+        )
+
+    @adjust_fails.command(name="remove", description="Remove a fail (X/6) for a user on a specific Wordle")
+    @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def adjust_fails_remove(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        wordle_number: int,
+    ):
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+            return
+
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
+                user.id, wordle_number,
+            )
+            await conn.execute(
+                """
+                DELETE FROM scores
+                WHERE user_id = $1 AND wordle_number = $2 AND attempts IS NULL
+                """,
+                user.id, wordle_number,
+            )
+
+        await interaction.response.send_message(
+            f"💀 Removed fail for {user.mention} on Wordle #{wordle_number}.",
             ephemeral=True,
         )
 
