@@ -14,12 +14,11 @@ import discord
 # ("id", int) or ("name", str)
 UserToken = Tuple[str, object]
 
-# Note: plain-text @ names terminate at whitespace, so display names containing
-# spaces are not supported. Revisit if a real summary breaks on this.
+# Plain-text names may contain spaces (e.g. "@Crazy Boy"). The name arm
+# terminates only at " @" / " <@" (next user on same line) or end-of-line.
 _TOKEN_RE = re.compile(
     r"<@!?(?P<id>\d{15,20})>"
-    r"|@(?P<name>[^\s@,<>][^@,<>\n]*?)"
-    r"(?=$|[\s,]|<@|👑)"
+    r"|@(?P<name>[^@<>\n]+?)(?=\s+@|\s+<@|\s*$|\n)"
 )
 
 _TRAILING_PUNCT = ".,;:!?"
@@ -181,6 +180,15 @@ if __name__ == "__main__":
         ("", []),
         ("👑 @alice", [("name", "alice")]),
         ("<@&99999999999999999>", []),
+        # Real Wordle summary shapes
+        ("@Bigboss @Dk", [("name", "Bigboss"), ("name", "Dk")]),
+        ("@Crazy Boy", [("name", "Crazy Boy")]),
+        ("@ENDLESS @Astroboy", [("name", "ENDLESS"), ("name", "Astroboy")]),
+        ("@Crazy Boy @ENDLESS", [("name", "Crazy Boy"), ("name", "ENDLESS")]),
+        ("👑 2/6: @Bigboss @Dk", [("name", "Bigboss"), ("name", "Dk")]),
+        ("3/6: @Crazy Boy @ENDLESS", [("name", "Crazy Boy"), ("name", "ENDLESS")]),
+        ("X/6: @Sabershark", [("name", "Sabershark")]),
+        ("<@111111111111111111> @Crazy Boy", [("id", 111111111111111111), ("name", "Crazy Boy")]),
     ]
     failed = 0
     for text, expected in cases:
