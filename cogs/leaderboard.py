@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from utils.leaderboard import generate_leaderboard_embed
+from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.parsing import calculate_streak
 
 class LeaderboardCog(commands.Cog):
@@ -34,17 +34,13 @@ class LeaderboardCog(commands.Cog):
                 await interaction.followup.send("⛔ This user is banned from leaderboards.")
                 return
 
-            # Get stats - games_played now includes both successes and fails
-            stats = await conn.fetchrow("""
+            # Get stats. Fails (attempts IS NULL) count as FAIL_PENALTY in avg.
+            stats = await conn.fetchrow(f"""
                 SELECT
                     COUNT(*) AS games_played,
                     COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
                     MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-                    CASE 
-                        WHEN COUNT(*) FILTER (WHERE attempts IS NOT NULL) > 0 
-                        THEN ROUND(AVG(attempts)::numeric, 2)
-                        ELSE NULL
-                    END AS avg_score,
+                    ROUND(AVG(COALESCE(attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_score,
                     MAX(date) AS last_game
                 FROM scores
                 WHERE user_id = $1

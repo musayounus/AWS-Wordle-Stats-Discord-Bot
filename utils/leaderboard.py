@@ -1,5 +1,10 @@
 import discord
 
+# Penalty attempts value for X/6 fails in avg calculations. NULLs in scores.attempts
+# are substituted with this value so fails count against a user's avg.
+FAIL_PENALTY = 7
+
+
 async def generate_leaderboard_embed(bot, user_id=None, range=None):
     where_clause = "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)"
     date_filter = ""
@@ -11,27 +16,19 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
 
     async with bot.pg_pool.acquire() as conn:
         try:
-            # Main leaderboard query - now counting all attempts (including fails) as games_played
+            # Main leaderboard query. Fails (attempts IS NULL) count as FAIL_PENALTY in avg.
             leaderboard_rows = await conn.fetch(f"""
-                SELECT 
-                    s.user_id, 
+                SELECT
+                    s.user_id,
                     MAX(s.username) AS username,
-                    COUNT(*) AS games_played,  -- Now includes both successes and fails
+                    COUNT(*) AS games_played,
                     COUNT(*) FILTER (WHERE s.attempts IS NULL) AS fails,
                     MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
-                    CASE 
-                        WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
-                        THEN ROUND(AVG(s.attempts)::numeric, 2)
-                        ELSE NULL
-                    END AS avg_attempts
+                    ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts
                 FROM scores s
                 {where_clause} {date_filter}
                 GROUP BY s.user_id
-                ORDER BY 
-                    CASE WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
-                         THEN ROUND(AVG(s.attempts)::numeric, 2)
-                         ELSE 999 END ASC,
-                    games_played DESC
+                ORDER BY avg_attempts ASC, games_played DESC
                 LIMIT 10
             """)
 
@@ -39,22 +36,16 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
             user_rank_row = None
             if user_id:
                 user_rank_row = await conn.fetchrow(f"""
-                    SELECT 
-                        s.user_id, 
+                    SELECT
+                        s.user_id,
                         MAX(s.username) AS username,
                         COUNT(*) AS games_played,
                         COUNT(*) FILTER (WHERE s.attempts IS NULL) AS fails,
                         MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
-                        CASE 
-                            WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
-                            THEN ROUND(AVG(s.attempts)::numeric, 2)
-                            ELSE NULL
-                        END AS avg_attempts,
+                        ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts,
                         RANK() OVER (
-                            ORDER BY 
-                                CASE WHEN COUNT(*) FILTER (WHERE s.attempts IS NOT NULL) > 0 
-                                     THEN ROUND(AVG(s.attempts)::numeric, 2)
-                                     ELSE 999 END,
+                            ORDER BY
+                                ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2),
                                 COUNT(*) DESC
                         ) AS rank
                     FROM scores s
