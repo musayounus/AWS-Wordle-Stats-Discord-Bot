@@ -10,27 +10,33 @@ class EventsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Avoid loops and invalid messages
-        if message.author == self.bot.user or not message.content:
+        # Avoid loops
+        if message.author == self.bot.user:
             return
 
-        content = message.content.strip()
+        content = (message.content or "").strip()
 
         # --- 1) Official Wordle summary messages ---
         if "Here are yesterday's results:" in content:
             await parse_summary_message(self.bot, message)
             return
 
-        # --- 2) Official `/share` embed from Wordle Bot ---
-        if message.author.bot and message.embeds:
-            embed = message.embeds[0]
-            if embed.title and re.search(r"Wordle\s+\d+\s+(\d|X)/6", embed.title, re.IGNORECASE):
+        # --- 2) Wordle APP /share (bot-authored slash-command result) ---
+        if message.author.bot:
+            meta = getattr(message, "interaction_metadata", None) or getattr(message, "interaction", None)
+            if meta is None or getattr(meta, "user", None) is None:
+                return
+            candidate = content or (message.embeds[0].title if message.embeds else "") or ""
+            if re.search(r"Wordle\s+\d+\s+(\d|X)/6", candidate, re.IGNORECASE):
                 await parse_wordle_message(self.bot, message)
+                from utils.leaderboard import generate_leaderboard_embed
+                embed = await generate_leaderboard_embed(self.bot)
+                await message.channel.send(embed=embed)
             return
 
         # --- 3) Manual text-based Wordle submissions ---
         # Only allow admins to submit manual Wordle scores
-        if (re.search(r"Wordle\s+\d+\s+(\d|X)/6", content, re.IGNORECASE) and 
+        if (re.search(r"Wordle\s+\d+\s+(\d|X)/6", content, re.IGNORECASE) and
             message.author.guild_permissions.administrator):
             await parse_wordle_message(self.bot, message)
             return

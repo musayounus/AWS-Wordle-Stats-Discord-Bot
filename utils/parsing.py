@@ -25,8 +25,27 @@ def calculate_streak(wordles, current_wordle=None):
             break
     return streak
 
+
+def _get_effective_user(message):
+    """For bot-authored slash-command results (e.g., Wordle APP /share),
+    return the invoking user from interaction metadata. Otherwise the author.
+    """
+    if not message.author.bot:
+        return message.author
+    meta = getattr(message, "interaction_metadata", None) or getattr(message, "interaction", None)
+    user = getattr(meta, "user", None) if meta is not None else None
+    if user is None:
+        return message.author
+    if message.guild is not None:
+        member = message.guild.get_member(user.id)
+        if member is not None:
+            return member
+    return user
+
+
 async def parse_wordle_message(bot, message):
-    match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', message.content, re.IGNORECASE)
+    raw_content = message.content or (message.embeds[0].title if message.embeds else "") or ""
+    match = re.search(r'Wordle\s+(\d+)\s+(\d|X)/6', raw_content, re.IGNORECASE)
     if not match:
         return
 
@@ -34,10 +53,11 @@ async def parse_wordle_message(bot, message):
     raw = match.group(2).upper()
     attempts = None if raw == "X" else int(raw)
     date = message.created_at.date()
+    user = _get_effective_user(message)
 
     async with bot.pg_pool.acquire() as conn:
         # Skip banned users
-        if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", message.author.id):
+        if await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", user.id):
             return
 
         # Always record in scores table (whether success or fail)
@@ -46,7 +66,7 @@ async def parse_wordle_message(bot, message):
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (username, wordle_number) DO UPDATE
             SET attempts = $5
-        """, message.author.id, message.author.display_name, wordle_number, date, attempts)
+        """, user.id, user.display_name, wordle_number, date, attempts)
 
         # For fails, also record in fails table
         if attempts is None:
@@ -54,27 +74,27 @@ async def parse_wordle_message(bot, message):
                 INSERT INTO fails (user_id, username, wordle_number, date)
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
-            """, message.author.id, message.author.display_name, wordle_number, date)
+            """, user.id, user.display_name, wordle_number, date)
             return
 
         # Success: remove any stale fail row for this (user, wordle) so fails stays in sync
         await conn.execute(
             "DELETE FROM fails WHERE user_id = $1 AND wordle_number = $2",
-            message.author.id, wordle_number,
+            user.id, wordle_number,
         )
 
         # Only check for personal best if it was a successful attempt
         previous_best = await conn.fetchval("""
             SELECT MIN(attempts) FROM scores
             WHERE user_id = $1 AND attempts IS NOT NULL AND wordle_number != $2
-        """, message.author.id, wordle_number)
+        """, user.id, wordle_number)
 
         # Handle 1/6 case
         if attempts == 1:
-            await message.channel.send(f"This person {message.author.mention} got it in **1/6**... You didn't cheat now, did you?..")
+            await message.channel.send(f"This person {user.mention} got it in **1/6**... You didn't cheat now, did you?..")
         elif previous_best is None or attempts < previous_best:
             await message.channel.send(
-                f"{message.author.mention} just beat their personal best with **{attempts}/6**. Good Job 👍"
+                f"{user.mention} just beat their personal best with **{attempts}/6**. Good Job 👍"
             )
 
 async def parse_summary_message(bot, message):
