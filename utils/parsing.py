@@ -1,6 +1,7 @@
 import re
 import datetime
 
+import config
 from utils.admin_helpers import current_wordle_number, validate_wordle_number
 from utils.user_resolver import (
     build_cache_from_mentions,
@@ -153,15 +154,20 @@ async def parse_wordle_message(bot, message):
         """, user.id, wordle_number)
 
         # Handle 1/6 case
-        if attempts == 1:
-            await message.channel.send(f"This person {user.mention} got it in **1/6**... You didn't cheat now, did you?..")
-        elif previous_best is None or attempts < previous_best:
-            await message.channel.send(
-                f"{user.mention} just beat their personal best with **{attempts}/6**. Good Job 👍"
-            )
+        if not config.TESTING_MODE:
+            if attempts == 1:
+                await message.channel.send(f"This person {user.mention} got it in **1/6**... You didn't cheat now, did you?..")
+            elif previous_best is None or attempts < previous_best:
+                await message.channel.send(
+                    f"{user.mention} just beat their personal best with **{attempts}/6**. Good Job 👍"
+                )
 
 async def parse_summary_message(bot, message):
     if "Here are yesterday's results:" not in (message.content or ""):
+        return
+    # Only accept summaries from the official Wordle Discord app — ignore
+    # anyone else posting the same header text (admin tests, copy-paste, etc).
+    if message.author.id != config.OFFICIAL_WORDLE_BOT_ID:
         return
 
     summary_lines = message.content.strip().splitlines()
@@ -234,12 +240,13 @@ async def parse_summary_message(bot, message):
                 """, user_id, wordle_number)
 
                 # Handle 1/6 case
-                if attempts == 1:
-                    await message.channel.send(f"This person <@{user_id}> got it in **1/6**... You didn't cheat now, did you?..")
-                elif previous_best is None or attempts < previous_best:
-                    await message.channel.send(
-                        f"<@{user_id}> just beat their personal best with **{attempts}/6**. Good Job 👍"
-                    )
+                if not config.TESTING_MODE:
+                    if attempts == 1:
+                        await message.channel.send(f"This person <@{user_id}> got it in **1/6**... You didn't cheat now, did you?..")
+                    elif previous_best is None or attempts < previous_best:
+                        await message.channel.send(
+                            f"<@{user_id}> just beat their personal best with **{attempts}/6**. Good Job 👍"
+                        )
 
         # Crown processing
         for uid, uname in crown_users:
@@ -258,7 +265,8 @@ async def parse_summary_message(bot, message):
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
             """, solo_id, solo_name, wordle_number, date)
 
-    # Send leaderboard update
-    from utils.leaderboard import generate_leaderboard_embed
-    embed = await generate_leaderboard_embed(bot)
-    await message.channel.send(embed=embed)
+    # Send leaderboard update (suppressed in testing mode so friends don't see it)
+    if not config.TESTING_MODE:
+        from utils.leaderboard import generate_leaderboard_embed
+        embed = await generate_leaderboard_embed(bot)
+        await message.channel.send(embed=embed)

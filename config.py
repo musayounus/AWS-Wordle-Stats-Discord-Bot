@@ -9,6 +9,17 @@ load_dotenv()
 TOKEN                = os.getenv("DISCORD_BOT_TOKEN")
 TEST_GUILD_ID        = int(os.getenv("TEST_GUILD_ID", "1364244767201955910"))
 
+# When True: only server admins can invoke slash commands, all command
+# responses default to ephemeral (only the invoker sees them), and passive
+# bot-initiated channel messages (personal-best praise, summary leaderboard
+# auto-post) are suppressed. Flip off for production.
+TESTING_MODE         = os.getenv("TESTING_MODE", "false").lower() in ("true", "1", "yes")
+
+# Discord user ID of the official Wordle app. Only summary messages from
+# this account are accepted by parse_summary_message; anyone else typing
+# "Here are yesterday's results:" is ignored.
+OFFICIAL_WORDLE_BOT_ID = int(os.getenv("OFFICIAL_WORDLE_BOT_ID", "1211781489931452447"))
+
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")
 RDS_SECRET_ARN   = os.getenv("RDS_SECRET_ARN")
