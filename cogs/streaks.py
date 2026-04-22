@@ -61,7 +61,7 @@ class StreaksCog(commands.Cog):
                     results.append((user["username"], streak_count))
         results.sort(key=lambda x: x[1], reverse=True)
         embed = discord.Embed(title="🔥 Top Streaks 🔥", color=0xff9900)
-        for idx, (user, streak_count) in enumerate(results[:10], start=1):
+        for idx, (user, streak_count) in enumerate(results[:15], start=1):
             embed.add_field(name=f"#{idx} {user}", value=f"{streak_count} in a row", inline=False)
         await interaction.followup.send(embed=embed)
 

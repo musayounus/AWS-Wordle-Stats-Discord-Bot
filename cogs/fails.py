@@ -28,7 +28,7 @@ class FailsCog(commands.Cog):
                   AND {NOT_VOIDED_SQL.format(alias='f')}
                 GROUP BY f.user_id
                 ORDER BY fail_count DESC
-                LIMIT 10
+                LIMIT 15
             """)
         if not rows:
             await interaction.followup.send("💀 No fails recorded yet.")

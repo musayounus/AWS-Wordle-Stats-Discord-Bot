@@ -34,7 +34,7 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
                 {where_clause} {date_filter}
                 GROUP BY s.user_id
                 ORDER BY avg_attempts ASC, games_played DESC
-                LIMIT 10
+                LIMIT 15
             """)
 
             # User rank query

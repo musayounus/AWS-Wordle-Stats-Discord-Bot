@@ -4,6 +4,7 @@ from discord.ext import commands
 import datetime
 import re
 import asyncio
+from zoneinfo import ZoneInfo
 
 import config
 from utils.user_resolver import (
@@ -254,7 +255,8 @@ class AdminCog(commands.Cog):
             if "Here are yesterday's results:" in content:
                 if message.author.id != config.OFFICIAL_WORDLE_BOT_ID:
                     continue
-                date = message.created_at.date() - datetime.timedelta(days=1)
+                local_date = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
+                date = local_date - datetime.timedelta(days=1)
                 wn = (date - wordle_start).days
                 lines = content.strip().splitlines()
                 pattern = re.compile(r"(\d|X)/6:\s+(.*)")

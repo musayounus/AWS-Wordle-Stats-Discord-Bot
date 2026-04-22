@@ -1,5 +1,6 @@
 import re
 import datetime
+from zoneinfo import ZoneInfo
 
 import config
 from utils.admin_helpers import current_wordle_number, validate_wordle_number
@@ -171,7 +172,8 @@ async def parse_summary_message(bot, message):
         return
 
     summary_lines = message.content.strip().splitlines()
-    date = message.created_at.date() - datetime.timedelta(days=1)
+    local_date = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
+    date = local_date - datetime.timedelta(days=1)
     wordle_start = datetime.date(2021, 6, 19)
     wordle_number = (date - wordle_start).days
     summary_pattern = re.compile(r"(\d|X)/6:\s+(.*)")

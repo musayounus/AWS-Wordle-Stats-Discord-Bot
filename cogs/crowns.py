@@ -20,6 +20,7 @@ class CrownsCog(commands.Cog):
                   AND {NOT_VOIDED_SQL.format(alias='s')}
                 GROUP BY user_id
                 ORDER BY crown_count DESC
+                LIMIT 15
             """)
         if not records:
             await interaction.followup.send("👑 No crown data yet.")

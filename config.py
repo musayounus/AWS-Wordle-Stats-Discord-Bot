@@ -20,6 +20,11 @@ TESTING_MODE         = os.getenv("TESTING_MODE", "false").lower() in ("true", "1
 # "Here are yesterday's results:" is ignored.
 OFFICIAL_WORDLE_BOT_ID = int(os.getenv("OFFICIAL_WORDLE_BOT_ID", "1211781489931452447"))
 
+# Timezone used to interpret "yesterday's results:" summary messages. The Wordle
+# Discord app posts shortly after midnight local; using UTC caused summaries
+# posted late-night-local to land on the wrong calendar day.
+WORDLE_TZ = os.getenv("WORDLE_TZ", "Asia/Riyadh")
+
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")
 RDS_SECRET_ARN   = os.getenv("RDS_SECRET_ARN")

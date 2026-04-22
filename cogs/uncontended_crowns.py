@@ -20,7 +20,7 @@ class UncontendedCrownsCog(commands.Cog):
                   AND {NOT_VOIDED_SQL.format(alias='s')}
                 GROUP BY user_id
                 ORDER BY count DESC
-                LIMIT 10
+                LIMIT 15
             """)
             
             if not rows:
