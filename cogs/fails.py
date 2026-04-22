@@ -48,6 +48,7 @@ class FailsCog(commands.Cog):
 
     @app_commands.command(name="add_fails", description="Add a fail (X/6) for a user on a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def add_fails(
         self,
@@ -88,6 +89,7 @@ class FailsCog(commands.Cog):
 
     @app_commands.command(name="remove_fails", description="Remove a fail (X/6) for a user on a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_fails(
         self,
