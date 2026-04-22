@@ -3,7 +3,6 @@ from discord import app_commands
 from discord.ext import commands
 import datetime
 import re
-import asyncio
 from zoneinfo import ZoneInfo
 
 import config
@@ -19,6 +18,63 @@ from utils.admin_helpers import (
 )
 from typing import Optional
 
+class _ResetConfirmView(discord.ui.View):
+    """Confirm/cancel buttons for /reset_leaderboard. Only the invoker can press."""
+
+    def __init__(self, bot, invoker_id: int):
+        super().__init__(timeout=30.0)
+        self.bot = bot
+        self.invoker_id = invoker_id
+        self.message: discord.Message | None = None
+
+    async def _reject_non_invoker(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.invoker_id:
+            await interaction.response.send_message(
+                "Only the admin who ran /reset_leaderboard can use these buttons.",
+                ephemeral=True,
+            )
+            return True
+        return False
+
+    def _disable_all(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="Confirm Reset", style=discord.ButtonStyle.danger, emoji="⚠️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if await self._reject_non_invoker(interaction):
+            return
+        self._disable_all()
+        await interaction.response.edit_message(content="⏳ Resetting…", view=self)
+        try:
+            async with self.bot.pg_pool.acquire() as conn:
+                await conn.execute("DELETE FROM scores")
+                await conn.execute("DELETE FROM crowns")
+                await conn.execute("DELETE FROM uncontended_crowns")
+                await conn.execute("DELETE FROM fails")
+                await conn.execute("DELETE FROM summary_log")
+            await interaction.edit_original_response(content="✅ Leaderboard reset.", view=self)
+        except Exception as e:
+            await interaction.edit_original_response(content=f"❌ Reset failed: {e}", view=self)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if await self._reject_non_invoker(interaction):
+            return
+        self._disable_all()
+        await interaction.response.edit_message(content="❌ Reset cancelled.", view=self)
+        self.stop()
+
+    async def on_timeout(self):
+        self._disable_all()
+        if self.message is not None:
+            try:
+                await self.message.edit(content="⌛ Reset prompt timed out.", view=self)
+            except discord.HTTPException:
+                pass
+
+
 class AdminCog(commands.Cog):
     """Admin-only commands for managing scores, bans, crowns, and imports."""
 
@@ -29,24 +85,12 @@ class AdminCog(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def resetleaderboard(self, interaction: discord.Interaction):
+        view = _ResetConfirmView(self.bot, interaction.user.id)
         await interaction.response.send_message(
-            "⚠️ Are you sure you want to reset the leaderboard? Type `yes` within 30s to confirm reset."
+            "⚠️ Reset the leaderboard? This wipes scores, fails, crowns, uncontended crowns, and summary_log.",
+            view=view,
         )
-        def check(m): 
-            return m.author.id == interaction.user.id and m.content.lower() == "yes"
-        try:
-            await self.bot.wait_for("message", timeout=30.0, check=check)
-            async with self.bot.pg_pool.acquire() as conn:
-                await conn.execute("DELETE FROM scores")
-                await conn.execute("DELETE FROM crowns")
-                await conn.execute("DELETE FROM uncontended_crowns")
-                await conn.execute("DELETE FROM fails")
-                await conn.execute("DELETE FROM summary_log")
-            await interaction.followup.send("✅ Leaderboard reset.")
-        except asyncio.TimeoutError:
-            await interaction.followup.send("❌ Reset cancelled.")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Reset failed: {e}")
+        view.message = await interaction.original_response()
 
     @app_commands.command(name="ban_user", description="Ban a user from leaderboard and stats")
     @app_commands.describe(user="User to ban")

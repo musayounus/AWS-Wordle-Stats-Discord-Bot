@@ -11,6 +11,27 @@ from utils.user_resolver import (
 )
 
 
+def longest_streak(wordles, voided=None):
+    """Longest run of consecutive played wordle numbers. Voided wordles bridge
+    a run (don't break it, don't count toward it). Unlike calculate_streak
+    this is time-window-agnostic — pass a pre-filtered `wordles` list.
+    """
+    voided = voided or set()
+    played = sorted(set(wordles) - voided)
+    if not played:
+        return 0
+    best = run = 1
+    for i in range(1, len(played)):
+        prev, cur = played[i - 1], played[i]
+        gap_bridged = cur == prev + 1 or all(g in voided for g in range(prev + 1, cur))
+        if gap_bridged:
+            run += 1
+            best = max(best, run)
+        else:
+            run = 1
+    return best
+
+
 def calculate_streak(wordles, current_wordle=None, voided=None):
     """Count consecutive Wordles played up to current_wordle.
 
