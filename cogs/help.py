@@ -24,8 +24,9 @@ class HelpCog(commands.Cog):
                 "/stats [user] [exclude_fails] – See detailed personal Wordle stats\n"
                 "/streak – Show your current streak\n"
                 "/streaks – View top 10 current streaks\n"
-                "/crowns – See how many 👑 crowns each user has\n"
-                "/uncontended – See how many 🥇 uncontested crowns each user has"
+                "/crowns [range] [year] [month] – 👑 crown leaderboard\n"
+                "/uncontended [range] [year] [month] – 🥇 uncontested crown leaderboard\n"
+                "/fails_leaderboard [range] [year] [month] – 💀 fails leaderboard"
             ),
             inline=False
         )

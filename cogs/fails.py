@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils.admin_helpers import NOT_VOIDED_SQL, validate_wordle_number, wordle_date_for_number
+from utils.range_filters import MONTH_CHOICES, RANGE_CHOICES, build_date_filter
 
 
 class FailsCog(commands.Cog):
@@ -15,8 +16,26 @@ class FailsCog(commands.Cog):
         name="fails_leaderboard",
         description="Show the Wordle fails leaderboard (who's missed Wordle most)"
     )
-    async def fails_leaderboard(self, interaction: discord.Interaction):
+    @app_commands.describe(
+        range="Relative window: week, month, year (ignored if year/month are set)",
+        year="Specific year to filter by",
+        month="Specific month (uses current year if year is omitted)",
+    )
+    @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
+    async def fails_leaderboard(
+        self,
+        interaction: discord.Interaction,
+        range: app_commands.Choice[str] = None,
+        year: app_commands.Range[int, 2021, 2100] = None,
+        month: app_commands.Choice[int] = None,
+    ):
         await interaction.response.defer(thinking=True)
+        date_filter, title_suffix = build_date_filter(
+            range=range.value if range else None,
+            year=year,
+            month=month.value if month else None,
+            column="f.date",
+        )
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch(f"""
                 SELECT
@@ -26,18 +45,19 @@ class FailsCog(commands.Cog):
                 FROM fails f
                 WHERE f.user_id NOT IN (SELECT user_id FROM banned_users)
                   AND {NOT_VOIDED_SQL.format(alias='f')}
+                  {date_filter}
                 GROUP BY f.user_id
                 ORDER BY fail_count DESC
                 LIMIT 15
             """)
         if not rows:
-            await interaction.followup.send("💀 No fails recorded yet.")
+            await interaction.followup.send("💀 No fails for this range.")
             return
 
-        embed = discord.Embed(
-            title="💀 Wordle Fails Leaderboard",
-            color=0xff0000
-        )
+        title = "💀 Wordle Fails Leaderboard"
+        if title_suffix:
+            title += f" ({title_suffix})"
+        embed = discord.Embed(title=title, color=0xff0000)
         for idx, r in enumerate(rows, start=1):
             embed.add_field(
                 name=f"#{idx} {r['display_name']}",

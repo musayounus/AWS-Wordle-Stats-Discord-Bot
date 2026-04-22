@@ -4,6 +4,7 @@ from discord.ext import commands
 from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.parsing import calculate_streak
 from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set as _load_voided_set
+from utils.range_filters import MONTH_CHOICES, RANGE_CHOICES
 
 class LeaderboardCog(commands.Cog):
     """Leaderboard display and personal stats commands."""
@@ -18,27 +19,7 @@ class LeaderboardCog(commands.Cog):
         month="Specific month to filter by (1–12); combined with year or current year",
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
     )
-    @app_commands.choices(
-        range=[
-            app_commands.Choice(name="week", value="week"),
-            app_commands.Choice(name="month", value="month"),
-            app_commands.Choice(name="year", value="year"),
-        ],
-        month=[
-            app_commands.Choice(name="January", value=1),
-            app_commands.Choice(name="February", value=2),
-            app_commands.Choice(name="March", value=3),
-            app_commands.Choice(name="April", value=4),
-            app_commands.Choice(name="May", value=5),
-            app_commands.Choice(name="June", value=6),
-            app_commands.Choice(name="July", value=7),
-            app_commands.Choice(name="August", value=8),
-            app_commands.Choice(name="September", value=9),
-            app_commands.Choice(name="October", value=10),
-            app_commands.Choice(name="November", value=11),
-            app_commands.Choice(name="December", value=12),
-        ],
-    )
+    @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
     async def leaderboard(
         self,
         interaction: discord.Interaction,
