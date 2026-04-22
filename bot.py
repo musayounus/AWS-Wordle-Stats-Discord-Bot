@@ -104,6 +104,17 @@ async def setup_hook():
                 PRIMARY KEY (user_id, wordle_number)
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS summary_log (
+                message_id BIGINT PRIMARY KEY,
+                posted_at TIMESTAMPTZ NOT NULL,
+                wordle_number INTEGER NOT NULL,
+                group_streak INTEGER
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_summary_log_posted_at ON summary_log (posted_at)"
+        )
 
     # 2) Load all cogs
     COGS_LIST = [

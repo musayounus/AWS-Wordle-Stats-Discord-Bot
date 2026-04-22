@@ -175,10 +175,34 @@ async def parse_summary_message(bot, message):
     local_date = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
     date = local_date - datetime.timedelta(days=1)
     wordle_start = datetime.date(2021, 6, 19)
-    wordle_number = (date - wordle_start).days
+    tentative_wordle = (date - wordle_start).days
     summary_pattern = re.compile(r"(\d|X)/6:\s+(.*)")
 
+    streak_match = re.search(r"(\d+)\s*day streak", message.content)
+    group_streak = int(streak_match.group(1)) if streak_match else None
+
     async with bot.pg_pool.acquire() as conn:
+        # Idempotency: if we've already processed this message, skip entirely.
+        existing = await conn.fetchval(
+            "SELECT wordle_number FROM summary_log WHERE message_id = $1",
+            message.id,
+        )
+        if existing is not None:
+            return
+
+        # Chain: if another summary was posted before this one and already
+        # claimed the tentative wordle, advance by one. Resolves two-summaries-
+        # in-one-day when a traveling user triggers the next wordle early.
+        last_wordle = await conn.fetchval(
+            "SELECT MAX(wordle_number) FROM summary_log WHERE posted_at < $1",
+            message.created_at,
+        )
+        if last_wordle is not None and tentative_wordle <= last_wordle:
+            wordle_number = last_wordle + 1
+            date = wordle_start + datetime.timedelta(days=wordle_number)
+        else:
+            wordle_number = tentative_wordle
+
         cache = build_cache_from_mentions(message)
 
         results = []
@@ -266,6 +290,15 @@ async def parse_summary_message(bot, message):
                 VALUES ($1, $2, $3, $4)
                 ON CONFLICT (user_id, wordle_number) DO NOTHING
             """, solo_id, solo_name, wordle_number, date)
+
+        await conn.execute(
+            """
+            INSERT INTO summary_log (message_id, posted_at, wordle_number, group_streak)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (message_id) DO NOTHING
+            """,
+            message.id, message.created_at, wordle_number, group_streak,
+        )
 
     # Send leaderboard update (suppressed in testing mode so friends don't see it)
     if not config.TESTING_MODE:

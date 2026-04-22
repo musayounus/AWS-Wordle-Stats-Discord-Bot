@@ -20,8 +20,8 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="🎯 Gameplay & Stats",
             value=(
-                "/leaderboard [range] – View top players (all time, week, month)\n"
-                "/stats [user] – See detailed personal Wordle stats\n"
+                "/leaderboard [range] [exclude_fails] – Top players (all time, week, month, year)\n"
+                "/stats [user] [exclude_fails] – See detailed personal Wordle stats\n"
                 "/streak – Show your current streak\n"
                 "/streaks – View top 10 current streaks\n"
                 "/crowns – See how many 👑 crowns each user has\n"

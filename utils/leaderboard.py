@@ -7,7 +7,7 @@ from utils.admin_helpers import NOT_VOIDED_SQL
 FAIL_PENALTY = 7
 
 
-async def generate_leaderboard_embed(bot, user_id=None, range=None):
+async def generate_leaderboard_embed(bot, user_id=None, range=None, exclude_fails=False):
     where_clause = (
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
@@ -18,10 +18,18 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
         date_filter = "AND s.date >= CURRENT_DATE - INTERVAL '7 days'"
     elif range == "month":
         date_filter = "AND date_trunc('month', s.date) = date_trunc('month', CURRENT_DATE)"
+    elif range == "year":
+        date_filter = "AND date_trunc('year', s.date) = date_trunc('year', CURRENT_DATE)"
+
+    # In exclude_fails mode, avg is over successful games only (NULLs skipped);
+    # users with no successful games get NULL avg and sort last.
+    if exclude_fails:
+        avg_expr = "ROUND(AVG(s.attempts) FILTER (WHERE s.attempts IS NOT NULL)::numeric, 2)"
+    else:
+        avg_expr = f"ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2)"
 
     async with bot.pg_pool.acquire() as conn:
         try:
-            # Main leaderboard query. Fails (attempts IS NULL) count as FAIL_PENALTY in avg.
             leaderboard_rows = await conn.fetch(f"""
                 SELECT
                     s.user_id,
@@ -29,15 +37,14 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
                     COUNT(*) AS games_played,
                     COUNT(*) FILTER (WHERE s.attempts IS NULL) AS fails,
                     MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
-                    ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts
+                    {avg_expr} AS avg_attempts
                 FROM scores s
                 {where_clause} {date_filter}
                 GROUP BY s.user_id
-                ORDER BY avg_attempts ASC, games_played DESC
+                ORDER BY avg_attempts ASC NULLS LAST, games_played DESC
                 LIMIT 15
             """)
 
-            # User rank query
             user_rank_row = None
             if user_id:
                 user_rank_row = await conn.fetchrow(f"""
@@ -47,10 +54,10 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
                         COUNT(*) AS games_played,
                         COUNT(*) FILTER (WHERE s.attempts IS NULL) AS fails,
                         MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
-                        ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts,
+                        {avg_expr} AS avg_attempts,
                         RANK() OVER (
                             ORDER BY
-                                ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2),
+                                {avg_expr} ASC NULLS LAST,
                                 COUNT(*) DESC
                         ) AS rank
                     FROM scores s
@@ -65,10 +72,14 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None):
     title_map = {
         None: "🏆 Wordle Leaderboard (All Time)",
         "week": "📅 Wordle Leaderboard (Last 7 Days)",
-        "month": "🗓️ Wordle Leaderboard (This Month)"
+        "month": "🗓️ Wordle Leaderboard (This Month)",
+        "year": "📆 Wordle Leaderboard (This Year)",
     }
 
-    embed = discord.Embed(title=title_map.get(range, "🏆 Wordle Leaderboard"), color=0x00ff00)
+    title = title_map.get(range, "🏆 Wordle Leaderboard")
+    if exclude_fails:
+        title += " — no-fail avg"
+    embed = discord.Embed(title=title, color=0x00ff00)
 
     if not leaderboard_rows:
         embed.description = "No scores yet for this range."

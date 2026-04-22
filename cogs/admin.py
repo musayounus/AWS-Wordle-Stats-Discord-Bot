@@ -41,6 +41,7 @@ class AdminCog(commands.Cog):
                 await conn.execute("DELETE FROM crowns")
                 await conn.execute("DELETE FROM uncontended_crowns")
                 await conn.execute("DELETE FROM fails")
+                await conn.execute("DELETE FROM summary_log")
             await interaction.followup.send("✅ Leaderboard reset.")
         except asyncio.TimeoutError:
             await interaction.followup.send("❌ Reset cancelled.")
@@ -217,6 +218,14 @@ class AdminCog(commands.Cog):
         wordle_start = datetime.date(2021, 6, 19)
         import_cache: dict = {}
 
+        # Chain anchor for summary processing: seed from any existing
+        # summary_log rows so re-runs interleave correctly. Reset wipes this
+        # table, so a fresh import starts with None.
+        async with self.bot.pg_pool.acquire() as conn:
+            last_summary_wordle = await conn.fetchval(
+                "SELECT MAX(wordle_number) FROM summary_log"
+            )
+
         async for message in channel.history(limit=None, oldest_first=True):
             content = message.content
 
@@ -256,12 +265,32 @@ class AdminCog(commands.Cog):
                 if message.author.id != config.OFFICIAL_WORDLE_BOT_ID:
                     continue
                 local_date = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
-                date = local_date - datetime.timedelta(days=1)
-                wn = (date - wordle_start).days
+                tentative_date = local_date - datetime.timedelta(days=1)
+                tentative_wn = (tentative_date - wordle_start).days
+
+                # Chain: second summary on same KSA day represents next wordle.
+                if last_summary_wordle is not None and tentative_wn <= last_summary_wordle:
+                    wn = last_summary_wordle + 1
+                    date = wordle_start + datetime.timedelta(days=wn)
+                else:
+                    wn = tentative_wn
+                    date = tentative_date
+
+                streak_match = re.search(r"(\d+)\s*day streak", content)
+                group_streak = int(streak_match.group(1)) if streak_match else None
+
                 lines = content.strip().splitlines()
                 pattern = re.compile(r"(\d|X)/6:\s+(.*)")
 
                 async with self.bot.pg_pool.acquire() as conn:
+                    already = await conn.fetchval(
+                        "SELECT wordle_number FROM summary_log WHERE message_id = $1",
+                        message.id,
+                    )
+                    if already is not None:
+                        last_summary_wordle = max(last_summary_wordle or already, already)
+                        continue
+
                     for user in message.mentions:
                         add_user_to_cache(import_cache, user)
 
@@ -336,6 +365,16 @@ class AdminCog(commands.Cog):
                         )
                         if existing:
                             uc_count += 1
+
+                    await conn.execute(
+                        """
+                        INSERT INTO summary_log (message_id, posted_at, wordle_number, group_streak)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (message_id) DO NOTHING
+                        """,
+                        message.id, message.created_at, wn, group_streak,
+                    )
+                    last_summary_wordle = wn
 
         # Rebuild uncontended_crowns from crowns (wordles with exactly one crown)
         async with self.bot.pg_pool.acquire() as conn:

@@ -12,36 +12,64 @@ class LeaderboardCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="leaderboard", description="Show Wordle leaderboard")
-    @app_commands.describe(range="Filter by: week, month, or leave empty for all-time")
-    async def leaderboard(self, interaction: discord.Interaction, range: str = None):
+    @app_commands.describe(
+        range="Filter by: week, month, year, or leave empty for all-time",
+        exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
+    )
+    @app_commands.choices(
+        range=[
+            app_commands.Choice(name="week", value="week"),
+            app_commands.Choice(name="month", value="month"),
+            app_commands.Choice(name="year", value="year"),
+        ],
+    )
+    async def leaderboard(
+        self,
+        interaction: discord.Interaction,
+        range: app_commands.Choice[str] = None,
+        exclude_fails: bool = False,
+    ):
         await interaction.response.defer(thinking=True)
         embed = await generate_leaderboard_embed(
             self.bot,
             user_id=interaction.user.id,
-            range=range
+            range=range.value if range else None,
+            exclude_fails=exclude_fails,
         )
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="stats", description="View your Wordle stats")
-    @app_commands.describe(user="Optional user to check (defaults to yourself)")
-    async def stats(self, interaction: discord.Interaction, user: discord.User = None):
+    @app_commands.describe(
+        user="Optional user to check (defaults to yourself)",
+        exclude_fails="If true, X/6 fails don't penalize avg score",
+    )
+    async def stats(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User = None,
+        exclude_fails: bool = False,
+    ):
         await interaction.response.defer(thinking=True)
         target_user = user or interaction.user
 
-        # Check if user is banned
+        avg_expr = (
+            "ROUND(AVG(attempts) FILTER (WHERE attempts IS NOT NULL)::numeric, 2)"
+            if exclude_fails
+            else f"ROUND(AVG(COALESCE(attempts, {FAIL_PENALTY}))::numeric, 2)"
+        )
+
         async with self.bot.pg_pool.acquire() as conn:
             is_banned = await conn.fetchval("SELECT 1 FROM banned_users WHERE user_id = $1", target_user.id)
             if is_banned:
                 await interaction.followup.send("⛔ This user is banned from leaderboards.")
                 return
 
-            # Get stats. Fails (attempts IS NULL) count as FAIL_PENALTY in avg.
             stats = await conn.fetchrow(f"""
                 SELECT
                     COUNT(*) AS games_played,
                     COUNT(*) FILTER (WHERE attempts IS NULL) AS fails,
                     MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
-                    ROUND(AVG(COALESCE(attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_score,
+                    {avg_expr} AS avg_score,
                     MAX(date) AS last_game
                 FROM scores s
                 WHERE s.user_id = $1
@@ -68,10 +96,10 @@ class LeaderboardCog(commands.Cog):
             )
             return
 
-        embed = discord.Embed(
-            title=f"📊 Wordle Stats for {target_user.display_name}",
-            color=0x3498db
-        )
+        title = f"📊 Wordle Stats for {target_user.display_name}"
+        if exclude_fails:
+            title += " — no-fail avg"
+        embed = discord.Embed(title=title, color=0x3498db)
         
         avg_score = f"{stats['avg_score']:.2f}" if stats['avg_score'] is not None else "—"
         best_score = stats['best_score'] or "—"
