@@ -1,12 +1,17 @@
 import discord
 
+from utils.admin_helpers import NOT_VOIDED_SQL
+
 # Penalty attempts value for X/6 fails in avg calculations. NULLs in scores.attempts
 # are substituted with this value so fails count against a user's avg.
 FAIL_PENALTY = 7
 
 
 async def generate_leaderboard_embed(bot, user_id=None, range=None):
-    where_clause = "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)"
+    where_clause = (
+        "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
+        f"AND {NOT_VOIDED_SQL.format(alias='s')}"
+    )
     date_filter = ""
 
     if range == "week":

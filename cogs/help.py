@@ -53,7 +53,11 @@ class HelpCog(commands.Cog):
                 "/add_fails, /remove_fails – Set or delete a user's fail for a Wordle\n"
                 "/add_crowns, /remove_crowns – Award or remove a user's crown for a Wordle\n"
                 "/ban_user – Ban a user from appearing in stats/leaderboard\n"
-                "/unban_user – Unban a previously banned user"
+                "/unban_user – Unban a previously banned user\n"
+                "/void_wordle, /unvoid_wordle – Void a whole Wordle day so no one's stats are affected (e.g. spoiler)\n"
+                "/voided_wordles – List all currently voided Wordle days\n"
+                "/void_user_wordle, /unvoid_user_wordle – Void one user's result on a specific Wordle (e.g. cheating)\n"
+                "/voided_user_wordles – List per-user voided Wordle results"
             ),
             inline=False
         )

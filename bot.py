@@ -47,6 +47,24 @@ async def setup_hook():
     bot.pg_pool = await create_db_pool()
     print("✅ Database pool initialized.")
 
+    async with bot.pg_pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS voided_wordles (
+                wordle_number INTEGER PRIMARY KEY,
+                voided_at TIMESTAMPTZ DEFAULT NOW(),
+                reason TEXT
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS voided_user_wordles (
+                user_id BIGINT NOT NULL,
+                wordle_number INTEGER NOT NULL,
+                voided_at TIMESTAMPTZ DEFAULT NOW(),
+                reason TEXT,
+                PRIMARY KEY (user_id, wordle_number)
+            )
+        """)
+
     # 2) Load all cogs
     COGS_LIST = [
         "cogs.admin",

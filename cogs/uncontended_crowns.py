@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from utils.admin_helpers import NOT_VOIDED_SQL
 
 class UncontendedCrownsCog(commands.Cog):
     """Leaderboard for solo first-place (uncontended) crowns."""
@@ -12,10 +13,11 @@ class UncontendedCrownsCog(commands.Cog):
     async def uncontended_crowns(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(f"""
                 SELECT user_id, MAX(username) AS username, COUNT(*) AS count
-                FROM uncontended_crowns
-                WHERE user_id NOT IN (SELECT user_id FROM banned_users)
+                FROM uncontended_crowns s
+                WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
+                  AND {NOT_VOIDED_SQL.format(alias='s')}
                 GROUP BY user_id
                 ORDER BY count DESC
                 LIMIT 10

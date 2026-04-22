@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.parsing import calculate_streak
+from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set as _load_voided_set
 
 class LeaderboardCog(commands.Cog):
     """Leaderboard display and personal stats commands."""
@@ -42,20 +43,24 @@ class LeaderboardCog(commands.Cog):
                     MIN(attempts) FILTER (WHERE attempts IS NOT NULL) AS best_score,
                     ROUND(AVG(COALESCE(attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_score,
                     MAX(date) AS last_game
-                FROM scores
-                WHERE user_id = $1
-                AND user_id NOT IN (SELECT user_id FROM banned_users)
+                FROM scores s
+                WHERE s.user_id = $1
+                AND s.user_id NOT IN (SELECT user_id FROM banned_users)
+                AND {NOT_VOIDED_SQL.format(alias='s')}
             """, target_user.id)
 
             # Get streak data (only successful attempts)
-            rows = await conn.fetch("""
-                SELECT wordle_number FROM scores
-                WHERE user_id = $1 AND attempts IS NOT NULL
-                AND user_id NOT IN (SELECT user_id FROM banned_users)
+            rows = await conn.fetch(f"""
+                SELECT wordle_number FROM scores s
+                WHERE s.user_id = $1 AND s.attempts IS NOT NULL
+                AND s.user_id NOT IN (SELECT user_id FROM banned_users)
+                AND {NOT_VOIDED_SQL.format(alias='s')}
                 ORDER BY wordle_number
             """, target_user.id)
 
-        streak_count = calculate_streak([r["wordle_number"] for r in rows])
+            voided_set = await _load_voided_set(conn, target_user.id)
+
+        streak_count = calculate_streak([r["wordle_number"] for r in rows], voided=voided_set)
 
         if not stats or stats['games_played'] == 0:
             await interaction.followup.send(

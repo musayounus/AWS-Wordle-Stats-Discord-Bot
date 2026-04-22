@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.admin_helpers import validate_wordle_number, wordle_date_for_number
+from utils.admin_helpers import NOT_VOIDED_SQL, validate_wordle_number, wordle_date_for_number
 
 
 class FailsCog(commands.Cog):
@@ -18,13 +18,14 @@ class FailsCog(commands.Cog):
     async def fails_leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
-            rows = await conn.fetch("""
-                SELECT 
+            rows = await conn.fetch(f"""
+                SELECT
                     f.user_id,
                     MAX(f.username) AS display_name,
                     COUNT(*) AS fail_count
                 FROM fails f
                 WHERE f.user_id NOT IN (SELECT user_id FROM banned_users)
+                  AND {NOT_VOIDED_SQL.format(alias='f')}
                 GROUP BY f.user_id
                 ORDER BY fail_count DESC
                 LIMIT 10

@@ -494,5 +494,170 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.command(name="void_wordle", description="Void a Wordle day — results won't count for anyone")
+    @app_commands.describe(wordle_number="Wordle number to void", reason="Why this day is being voided (optional)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def void_wordle(
+        self,
+        interaction: discord.Interaction,
+        wordle_number: int,
+        reason: Optional[str] = None,
+    ):
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+            return
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO voided_wordles (wordle_number, reason)
+                VALUES ($1, $2)
+                ON CONFLICT (wordle_number) DO UPDATE SET reason = EXCLUDED.reason
+                """,
+                wordle_number, reason,
+            )
+        reason_str = reason or "not specified"
+        await interaction.response.send_message(
+            f"🚫 **Wordle {wordle_number} voided.** Results for this day will not count toward anyone's stats. "
+            f"Reason: {reason_str}."
+        )
+
+    @app_commands.command(name="unvoid_wordle", description="Un-void a Wordle day — results count again")
+    @app_commands.describe(wordle_number="Wordle number to un-void")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def unvoid_wordle(self, interaction: discord.Interaction, wordle_number: int):
+        async with self.bot.pg_pool.acquire() as conn:
+            existed = await conn.fetchval(
+                "DELETE FROM voided_wordles WHERE wordle_number = $1 RETURNING wordle_number",
+                wordle_number,
+            )
+            if existed is None:
+                await interaction.response.send_message(
+                    f"ℹ️ Wordle {wordle_number} was not voided — no change.", ephemeral=True
+                )
+                return
+            await sync_uncontended_for_wordle(conn, wordle_number)
+        await interaction.response.send_message(
+            f"✅ **Wordle {wordle_number} unvoided.** Results for this day now count again."
+        )
+
+    @app_commands.command(name="voided_wordles", description="List all voided Wordle days")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def voided_wordles_list(self, interaction: discord.Interaction):
+        async with self.bot.pg_pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT wordle_number, voided_at, reason FROM voided_wordles ORDER BY wordle_number DESC"
+            )
+        if not rows:
+            await interaction.response.send_message("No wordles are currently voided.", ephemeral=True)
+            return
+        embed = discord.Embed(title="🚫 Voided Wordles", color=0xff0000)
+        for r in rows[:25]:
+            reason = r["reason"] or "not specified"
+            voided_at = r["voided_at"].strftime("%Y-%m-%d") if r["voided_at"] else "—"
+            embed.add_field(
+                name=f"Wordle #{r['wordle_number']}",
+                value=f"Reason: {reason}\nVoided: {voided_at}",
+                inline=False,
+            )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="void_user_wordle", description="Void one user's result on a specific Wordle (e.g. cheating)")
+    @app_commands.describe(
+        user="User whose result is being voided",
+        wordle_number="Wordle number",
+        reason="Why this result is being voided (optional)",
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def void_user_wordle(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        wordle_number: int,
+        reason: Optional[str] = None,
+    ):
+        err = validate_wordle_number(wordle_number)
+        if err:
+            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+            return
+        async with self.bot.pg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO voided_user_wordles (user_id, wordle_number, reason)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (user_id, wordle_number) DO UPDATE SET reason = EXCLUDED.reason
+                """,
+                user.id, wordle_number, reason,
+            )
+            await sync_uncontended_for_wordle(conn, wordle_number)
+        reason_str = reason or "not specified"
+        await interaction.response.send_message(
+            f"🚫 **{user.mention}'s result for Wordle {wordle_number} has been voided.** "
+            f"Reason: {reason_str}."
+        )
+
+    @app_commands.command(name="unvoid_user_wordle", description="Restore one user's voided Wordle result")
+    @app_commands.describe(user="User to restore", wordle_number="Wordle number")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def unvoid_user_wordle(
+        self,
+        interaction: discord.Interaction,
+        user: discord.User,
+        wordle_number: int,
+    ):
+        async with self.bot.pg_pool.acquire() as conn:
+            existed = await conn.fetchval(
+                "DELETE FROM voided_user_wordles WHERE user_id = $1 AND wordle_number = $2 RETURNING wordle_number",
+                user.id, wordle_number,
+            )
+            if existed is None:
+                await interaction.response.send_message(
+                    f"ℹ️ {user.mention}'s result for Wordle {wordle_number} was not voided — no change.",
+                    ephemeral=True,
+                )
+                return
+            await sync_uncontended_for_wordle(conn, wordle_number)
+        await interaction.response.send_message(
+            f"✅ **{user.mention}'s result for Wordle {wordle_number} has been restored.**"
+        )
+
+    @app_commands.command(name="voided_user_wordles", description="List per-user voided Wordle results")
+    @app_commands.describe(user="Filter to a specific user (optional)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def voided_user_wordles_list(
+        self,
+        interaction: discord.Interaction,
+        user: Optional[discord.User] = None,
+    ):
+        async with self.bot.pg_pool.acquire() as conn:
+            if user is not None:
+                rows = await conn.fetch(
+                    "SELECT user_id, wordle_number, voided_at, reason "
+                    "FROM voided_user_wordles WHERE user_id = $1 "
+                    "ORDER BY wordle_number DESC",
+                    user.id,
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT user_id, wordle_number, voided_at, reason "
+                    "FROM voided_user_wordles ORDER BY wordle_number DESC"
+                )
+        if not rows:
+            await interaction.response.send_message(
+                "No per-user voids to show.", ephemeral=True
+            )
+            return
+        embed = discord.Embed(title="🚫 Per-User Voided Wordles", color=0xff0000)
+        for r in rows[:25]:
+            reason = r["reason"] or "not specified"
+            voided_at = r["voided_at"].strftime("%Y-%m-%d") if r["voided_at"] else "—"
+            embed.add_field(
+                name=f"<@{r['user_id']}> — Wordle #{r['wordle_number']}",
+                value=f"Reason: {reason}\nVoided: {voided_at}",
+                inline=False,
+            )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))

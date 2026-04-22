@@ -9,20 +9,46 @@ from utils.user_resolver import (
 )
 
 
-def calculate_streak(wordles, current_wordle=None):
+def calculate_streak(wordles, current_wordle=None, voided=None):
+    """Count consecutive Wordles played up to current_wordle.
+
+    `voided` is a set of wordle numbers that should be skipped entirely —
+    they neither break a streak nor count toward one. Covers both globally
+    voided wordles and per-user voids.
+    """
     if current_wordle is None:
         current_wordle = current_wordle_number()
-    valid = sorted({w for w in wordles if w <= current_wordle})
-    if not valid:
+    voided = voided or set()
+    played = {w for w in wordles if w <= current_wordle and w not in voided}
+    if not played:
         return 0
-    if valid[-1] < current_wordle - 1:
+
+    # effective_current = largest non-voided wordle ≤ current_wordle.
+    effective_current = current_wordle
+    while effective_current > 0 and effective_current in voided:
+        effective_current -= 1
+    if effective_current <= 0:
         return 0
-    streak = 1
-    for i in range(len(valid) - 2, -1, -1):
-        if valid[i] == valid[i + 1] - 1:
-            streak += 1
-        else:
-            break
+
+    # Find the most recent played wordle (skipping voids doesn't matter —
+    # played set already excludes voids). Streak is live only if it's
+    # effective_current or the day before (after skipping voids).
+    latest_played = max(played)
+    day_before = effective_current - 1
+    while day_before > 0 and day_before in voided:
+        day_before -= 1
+    if latest_played < day_before:
+        return 0
+
+    # Walk backwards from latest_played, counting played days and skipping
+    # voided numbers (they don't break the chain).
+    streak = 0
+    cursor = latest_played
+    while cursor > 0 and cursor in played:
+        streak += 1
+        cursor -= 1
+        while cursor > 0 and cursor in voided:
+            cursor -= 1
     return streak
 
 
