@@ -5,6 +5,7 @@ import datetime
 import re
 import asyncio
 
+import config
 from utils.user_resolver import (
     add_user_to_cache,
     extract_user_tokens,
@@ -249,8 +250,10 @@ class AdminCog(commands.Cog):
                         pass
                 continue
 
-            # Summary messages
+            # Summary messages — only from the official Wordle Discord app
             if "Here are yesterday's results:" in content:
+                if message.author.id != config.OFFICIAL_WORDLE_BOT_ID:
+                    continue
                 date = message.created_at.date() - datetime.timedelta(days=1)
                 wn = (date - wordle_start).days
                 lines = content.strip().splitlines()
