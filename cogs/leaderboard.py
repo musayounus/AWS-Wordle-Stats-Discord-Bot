@@ -13,7 +13,9 @@ class LeaderboardCog(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="Show Wordle leaderboard")
     @app_commands.describe(
-        range="Filter by: week, month, year, or leave empty for all-time",
+        range="Relative window: week, month, year (ignored if year/month are set)",
+        year="Specific year to filter by (e.g. 2024)",
+        month="Specific month to filter by (1–12); combined with year or current year",
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
     )
     @app_commands.choices(
@@ -22,11 +24,27 @@ class LeaderboardCog(commands.Cog):
             app_commands.Choice(name="month", value="month"),
             app_commands.Choice(name="year", value="year"),
         ],
+        month=[
+            app_commands.Choice(name="January", value=1),
+            app_commands.Choice(name="February", value=2),
+            app_commands.Choice(name="March", value=3),
+            app_commands.Choice(name="April", value=4),
+            app_commands.Choice(name="May", value=5),
+            app_commands.Choice(name="June", value=6),
+            app_commands.Choice(name="July", value=7),
+            app_commands.Choice(name="August", value=8),
+            app_commands.Choice(name="September", value=9),
+            app_commands.Choice(name="October", value=10),
+            app_commands.Choice(name="November", value=11),
+            app_commands.Choice(name="December", value=12),
+        ],
     )
     async def leaderboard(
         self,
         interaction: discord.Interaction,
         range: app_commands.Choice[str] = None,
+        year: app_commands.Range[int, 2021, 2100] = None,
+        month: app_commands.Choice[int] = None,
         exclude_fails: bool = False,
     ):
         await interaction.response.defer(thinking=True)
@@ -35,6 +53,8 @@ class LeaderboardCog(commands.Cog):
             user_id=interaction.user.id,
             range=range.value if range else None,
             exclude_fails=exclude_fails,
+            year=year,
+            month=month.value if month else None,
         )
         await interaction.followup.send(embed=embed)
 

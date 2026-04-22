@@ -1,3 +1,5 @@
+import calendar
+
 import discord
 
 from utils.admin_helpers import NOT_VOIDED_SQL
@@ -7,14 +9,39 @@ from utils.admin_helpers import NOT_VOIDED_SQL
 FAIL_PENALTY = 7
 
 
-async def generate_leaderboard_embed(bot, user_id=None, range=None, exclude_fails=False):
+async def generate_leaderboard_embed(
+    bot,
+    user_id=None,
+    range=None,
+    exclude_fails=False,
+    year=None,
+    month=None,
+):
     where_clause = (
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
     date_filter = ""
+    custom_title = None
 
-    if range == "week":
+    # Explicit year/month override the relative range.
+    if year is not None and month is not None:
+        date_filter = (
+            f"AND EXTRACT(YEAR FROM s.date) = {int(year)} "
+            f"AND EXTRACT(MONTH FROM s.date) = {int(month)}"
+        )
+        custom_title = f"🗓️ Wordle Leaderboard ({calendar.month_name[int(month)]} {int(year)})"
+    elif year is not None:
+        date_filter = f"AND EXTRACT(YEAR FROM s.date) = {int(year)}"
+        custom_title = f"📆 Wordle Leaderboard ({int(year)})"
+    elif month is not None:
+        # Month without year → that month in the current year.
+        date_filter = (
+            f"AND EXTRACT(MONTH FROM s.date) = {int(month)} "
+            "AND EXTRACT(YEAR FROM s.date) = EXTRACT(YEAR FROM CURRENT_DATE)"
+        )
+        custom_title = f"🗓️ Wordle Leaderboard ({calendar.month_name[int(month)]})"
+    elif range == "week":
         date_filter = "AND s.date >= CURRENT_DATE - INTERVAL '7 days'"
     elif range == "month":
         date_filter = "AND date_trunc('month', s.date) = date_trunc('month', CURRENT_DATE)"
@@ -76,7 +103,7 @@ async def generate_leaderboard_embed(bot, user_id=None, range=None, exclude_fail
         "year": "📆 Wordle Leaderboard (This Year)",
     }
 
-    title = title_map.get(range, "🏆 Wordle Leaderboard")
+    title = custom_title or title_map.get(range, "🏆 Wordle Leaderboard")
     if exclude_fails:
         title += " — no-fail avg"
     embed = discord.Embed(title=title, color=0x00ff00)
