@@ -2,8 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
-from utils.parsing import calculate_streak
-from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set as _load_voided_set
+from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.range_filters import MONTH_CHOICES
 
 class LeaderboardCog(commands.Cog):
@@ -78,19 +77,6 @@ class LeaderboardCog(commands.Cog):
                 AND {NOT_VOIDED_SQL.format(alias='s')}
             """, target_user.id)
 
-            # Get streak data (only successful attempts)
-            rows = await conn.fetch(f"""
-                SELECT wordle_number FROM scores s
-                WHERE s.user_id = $1 AND s.attempts IS NOT NULL
-                AND s.user_id NOT IN (SELECT user_id FROM banned_users)
-                AND {NOT_VOIDED_SQL.format(alias='s')}
-                ORDER BY wordle_number
-            """, target_user.id)
-
-            voided_set = await _load_voided_set(conn, target_user.id)
-
-        streak_count = calculate_streak([r["wordle_number"] for r in rows], voided=voided_set)
-
         if not stats or stats['games_played'] == 0:
             await interaction.followup.send(
                 f"ℹ️ No Wordle scores found for {target_user.display_name}."
@@ -109,7 +95,6 @@ class LeaderboardCog(commands.Cog):
         embed.add_field(name="Avg Score", value=avg_score, inline=True)
         embed.add_field(name="Fails (X/6)", value=stats['fails'], inline=True)
         embed.add_field(name="Games Played", value=stats['games_played'], inline=True)
-        embed.add_field(name="Current Streak", value=streak_count, inline=True)
         embed.add_field(name="Last Played", value=stats['last_game'] or "—", inline=True)
 
         await interaction.followup.send(embed=embed)

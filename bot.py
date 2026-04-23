@@ -120,7 +120,6 @@ async def setup_hook():
     COGS_LIST = [
         "cogs.admin",
         "cogs.leaderboard",
-        "cogs.streaks",
         "cogs.help",
         "cogs.events",
         "cogs.crowns",

@@ -22,8 +22,6 @@ class HelpCog(commands.Cog):
             value=(
                 "/leaderboard [year] [month] [exclude_fails] [min_games] – Top players (all time, or specific year/month)\n"
                 "/stats [user] [exclude_fails] – See detailed personal Wordle stats\n"
-                "/streak – Show your current streak\n"
-                "/streaks – View top 15 current streaks\n"
                 "/crowns [year] [month] [min_games] – 👑 crown leaderboard\n"
                 "/uncontended [year] [month] [min_games] – 🥇 uncontested crown leaderboard\n"
                 "/fails_leaderboard [year] [month] [min_games] – 💀 fails leaderboard"
