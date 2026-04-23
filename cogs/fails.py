@@ -20,6 +20,7 @@ class FailsCog(commands.Cog):
         range="Relative window: week, month, year (ignored if year/month are set)",
         year="Specific year to filter by",
         month="Specific month (uses current year if year is omitted)",
+        min_games="Only include users with at least this many games in the window",
     )
     @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
     async def fails_leaderboard(
@@ -28,6 +29,7 @@ class FailsCog(commands.Cog):
         range: app_commands.Choice[str] = None,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
+        min_games: app_commands.Range[int, 1, 10000] = None,
     ):
         await interaction.response.defer(thinking=True)
         date_filter, title_suffix = build_date_filter(
@@ -36,6 +38,23 @@ class FailsCog(commands.Cog):
             month=month.value if month else None,
             column="f.date",
         )
+        scores_date_filter, _ = build_date_filter(
+            range=range.value if range else None,
+            year=year,
+            month=month.value if month else None,
+            column="sc.date",
+        )
+        min_games_clause = ""
+        if min_games:
+            min_games_clause = f"""
+                HAVING (
+                    SELECT COUNT(*) FROM scores sc
+                    WHERE sc.user_id = f.user_id
+                      AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
+                      AND {NOT_VOIDED_SQL.format(alias='sc')}
+                      {scores_date_filter}
+                ) >= {int(min_games)}
+            """
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch(f"""
                 SELECT
@@ -47,6 +66,7 @@ class FailsCog(commands.Cog):
                   AND {NOT_VOIDED_SQL.format(alias='f')}
                   {date_filter}
                 GROUP BY f.user_id
+                {min_games_clause}
                 ORDER BY fail_count DESC
                 LIMIT 15
             """)
@@ -57,6 +77,8 @@ class FailsCog(commands.Cog):
         title = "💀 Wordle Fails Leaderboard"
         if title_suffix:
             title += f" ({title_suffix})"
+        if min_games:
+            title += f" — ≥{int(min_games)} games"
         embed = discord.Embed(title=title, color=0xff0000)
         for idx, r in enumerate(rows, start=1):
             embed.add_field(

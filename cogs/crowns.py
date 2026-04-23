@@ -15,6 +15,7 @@ class CrownsCog(commands.Cog):
         range="Relative window: week, month, year (ignored if year/month are set)",
         year="Specific year to filter by",
         month="Specific month (uses current year if year is omitted)",
+        min_games="Only include users with at least this many games in the window",
     )
     @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
     async def crowns(
@@ -23,6 +24,7 @@ class CrownsCog(commands.Cog):
         range: app_commands.Choice[str] = None,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
+        min_games: app_commands.Range[int, 1, 10000] = None,
     ):
         await interaction.response.defer(thinking=True)
         date_filter, title_suffix = build_date_filter(
@@ -30,14 +32,32 @@ class CrownsCog(commands.Cog):
             year=year,
             month=month.value if month else None,
         )
+        scores_date_filter, _ = build_date_filter(
+            range=range.value if range else None,
+            year=year,
+            month=month.value if month else None,
+            column="sc.date",
+        )
+        min_games_clause = ""
+        if min_games:
+            min_games_clause = f"""
+                HAVING (
+                    SELECT COUNT(*) FROM scores sc
+                    WHERE sc.user_id = s.user_id
+                      AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
+                      AND {NOT_VOIDED_SQL.format(alias='sc')}
+                      {scores_date_filter}
+                ) >= {int(min_games)}
+            """
         async with self.bot.pg_pool.acquire() as conn:
             records = await conn.fetch(f"""
-                SELECT user_id, MAX(username) AS display_name, COUNT(*) AS crown_count
+                SELECT s.user_id, MAX(s.username) AS display_name, COUNT(*) AS crown_count
                 FROM crowns s
                 WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
                   AND {NOT_VOIDED_SQL.format(alias='s')}
                   {date_filter}
-                GROUP BY user_id
+                GROUP BY s.user_id
+                {min_games_clause}
                 ORDER BY crown_count DESC
                 LIMIT 15
             """)
@@ -47,6 +67,8 @@ class CrownsCog(commands.Cog):
         title = "👑 Crown Leaderboard 👑"
         if title_suffix:
             title += f" ({title_suffix})"
+        if min_games:
+            title += f" — ≥{int(min_games)} games"
         embed = discord.Embed(title=title, color=0xf1c40f)
         for idx, row in enumerate(records, start=1):
             embed.add_field(

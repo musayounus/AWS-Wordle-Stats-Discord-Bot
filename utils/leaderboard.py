@@ -15,12 +15,16 @@ async def generate_leaderboard_embed(
     exclude_fails=False,
     year=None,
     month=None,
+    min_games=None,
 ):
     where_clause = (
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
     date_filter, title_suffix = build_date_filter(range=range, year=year, month=month)
+    min_clause = f"COUNT(*) >= {int(min_games)}" if min_games else "TRUE"
+    having_min = f"HAVING {min_clause}" if min_games else ""
+    having_min_and = f"AND {min_clause}" if min_games else ""
 
     # In exclude_fails mode, avg is over successful games only (NULLs skipped);
     # users with no successful games get NULL avg and sort last.
@@ -42,6 +46,7 @@ async def generate_leaderboard_embed(
                 FROM scores s
                 {where_clause} {date_filter}
                 GROUP BY s.user_id
+                {having_min}
                 ORDER BY avg_attempts ASC NULLS LAST, games_played DESC
                 LIMIT 15
             """)
@@ -58,13 +63,13 @@ async def generate_leaderboard_embed(
                         {avg_expr} AS avg_attempts,
                         RANK() OVER (
                             ORDER BY
-                                {avg_expr} ASC NULLS LAST,
-                                COUNT(*) DESC
+                                CASE WHEN {min_clause} THEN {avg_expr} END ASC NULLS LAST,
+                                CASE WHEN {min_clause} THEN COUNT(*) END DESC NULLS LAST
                         ) AS rank
                     FROM scores s
                     {where_clause} {date_filter}
                     GROUP BY s.user_id
-                    HAVING s.user_id = $1
+                    HAVING s.user_id = $1 {having_min_and}
                 """, user_id)
         except Exception as e:
             print(f"Error generating leaderboard: {e}")
@@ -74,6 +79,8 @@ async def generate_leaderboard_embed(
     title += f" ({title_suffix})" if title_suffix else " (All Time)"
     if exclude_fails:
         title += " — no-fail avg"
+    if min_games:
+        title += f" — ≥{int(min_games)} games"
     embed = discord.Embed(title=title, color=0x00ff00)
 
     if not leaderboard_rows:

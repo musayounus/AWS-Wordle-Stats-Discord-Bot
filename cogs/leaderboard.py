@@ -18,6 +18,7 @@ class LeaderboardCog(commands.Cog):
         year="Specific year to filter by (e.g. 2024)",
         month="Specific month to filter by (1–12); combined with year or current year",
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
+        min_games="Only include users with at least this many games in the window",
     )
     @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
     async def leaderboard(
@@ -27,6 +28,7 @@ class LeaderboardCog(commands.Cog):
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
         exclude_fails: bool = False,
+        min_games: app_commands.Range[int, 1, 10000] = None,
     ):
         await interaction.response.defer(thinking=True)
         embed = await generate_leaderboard_embed(
@@ -36,6 +38,7 @@ class LeaderboardCog(commands.Cog):
             exclude_fails=exclude_fails,
             year=year,
             month=month.value if month else None,
+            min_games=min_games,
         )
         await interaction.followup.send(embed=embed)
 

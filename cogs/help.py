@@ -20,13 +20,13 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="🎯 Gameplay & Stats",
             value=(
-                "/leaderboard [range] [year] [month] [exclude_fails] – Top players (all time, relative range, or specific year/month)\n"
+                "/leaderboard [range] [year] [month] [exclude_fails] [min_games] – Top players (all time, relative range, or specific year/month)\n"
                 "/stats [user] [exclude_fails] – See detailed personal Wordle stats\n"
                 "/streak – Show your current streak\n"
                 "/streaks – View top 15 current streaks\n"
-                "/crowns [range] [year] [month] – 👑 crown leaderboard\n"
-                "/uncontended [range] [year] [month] – 🥇 uncontested crown leaderboard\n"
-                "/fails_leaderboard [range] [year] [month] – 💀 fails leaderboard"
+                "/crowns [range] [year] [month] [min_games] – 👑 crown leaderboard\n"
+                "/uncontended [range] [year] [month] [min_games] – 🥇 uncontested crown leaderboard\n"
+                "/fails_leaderboard [range] [year] [month] [min_games] – 💀 fails leaderboard"
             ),
             inline=False
         )
