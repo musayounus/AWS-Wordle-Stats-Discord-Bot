@@ -7,7 +7,8 @@ load_dotenv()
 
 # ── Discord / Bot settings ────────────────────────────────────────────────────
 TOKEN                = os.getenv("DISCORD_BOT_TOKEN")
-TEST_GUILD_ID        = int(os.getenv("TEST_GUILD_ID", "1364244767201955910"))
+_test_guild_env      = os.getenv("TEST_GUILD_ID")
+TEST_GUILD_ID        = int(_test_guild_env) if _test_guild_env else None
 
 # When True: only server admins can invoke slash commands, all command
 # responses default to ephemeral (only the invoker sees them), and passive

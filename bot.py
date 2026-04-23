@@ -135,10 +135,11 @@ async def setup_hook():
         except Exception as e:
             print(f"❌ Failed loading {cog}: {e}")
 
-    # 3) Sync slash commands globally & to test guild
+    # 3) Sync slash commands globally & to test guild (if TEST_GUILD_ID is set)
     try:
         await bot.tree.sync()
-        await bot.tree.sync(guild=discord.Object(id=config.TEST_GUILD_ID))
+        if config.TEST_GUILD_ID:
+            await bot.tree.sync(guild=discord.Object(id=config.TEST_GUILD_ID))
         print("✅ Slash commands synced.")
     except Exception as e:
         print(f"⚠️ Error syncing slash commands: {e}")
