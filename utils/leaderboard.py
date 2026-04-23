@@ -11,7 +11,6 @@ FAIL_PENALTY = 7
 async def generate_leaderboard_embed(
     bot,
     user_id=None,
-    range=None,
     exclude_fails=False,
     year=None,
     month=None,
@@ -21,7 +20,7 @@ async def generate_leaderboard_embed(
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
-    date_filter, title_suffix = build_date_filter(range=range, year=year, month=month)
+    date_filter, title_suffix = build_date_filter(year=year, month=month)
     min_clause = f"COUNT(*) >= {int(min_games)}" if min_games else "TRUE"
     having_min = f"HAVING {min_clause}" if min_games else ""
     having_min_and = f"AND {min_clause}" if min_games else ""

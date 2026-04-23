@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.admin_helpers import NOT_VOIDED_SQL
-from utils.range_filters import MONTH_CHOICES, RANGE_CHOICES, build_date_filter
+from utils.range_filters import MONTH_CHOICES, build_date_filter
 
 class UncontendedCrownsCog(commands.Cog):
     """Leaderboard for solo first-place (uncontended) crowns."""
@@ -12,28 +12,24 @@ class UncontendedCrownsCog(commands.Cog):
 
     @app_commands.command(name="uncontended", description="Show the uncontended crowns leaderboard.")
     @app_commands.describe(
-        range="Relative window: week, month, year (ignored if year/month are set)",
         year="Specific year to filter by",
         month="Specific month (uses current year if year is omitted)",
         min_games="Only include users with at least this many games in the window",
     )
-    @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
+    @app_commands.choices(month=MONTH_CHOICES)
     async def uncontended_crowns(
         self,
         interaction: discord.Interaction,
-        range: app_commands.Choice[str] = None,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
         min_games: app_commands.Range[int, 1, 10000] = None,
     ):
         await interaction.response.defer(thinking=True)
         date_filter, title_suffix = build_date_filter(
-            range=range.value if range else None,
             year=year,
             month=month.value if month else None,
         )
         scores_date_filter, _ = build_date_filter(
-            range=range.value if range else None,
             year=year,
             month=month.value if month else None,
             column="sc.date",

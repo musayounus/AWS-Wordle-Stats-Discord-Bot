@@ -81,7 +81,7 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="reset_leaderboard", description="Reset the Wordle leaderboard")
+    @app_commands.command(name="reset_leaderboard", description="(Admin-Only) Reset the Wordle leaderboard")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def resetleaderboard(self, interaction: discord.Interaction):
@@ -92,7 +92,7 @@ class AdminCog(commands.Cog):
         )
         view.message = await interaction.original_response()
 
-    @app_commands.command(name="ban_user", description="Ban a user from leaderboard and stats")
+    @app_commands.command(name="ban_user", description="(Admin-Only) Ban a user from leaderboard and stats")
     @app_commands.describe(user="User to ban")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -108,7 +108,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
 
-    @app_commands.command(name="unban_user", description="Unban a previously banned user")
+    @app_commands.command(name="unban_user", description="(Admin-Only) Unban a previously banned user")
     @app_commands.describe(user="User to unban")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -120,7 +120,7 @@ class AdminCog(commands.Cog):
             except Exception as e:
                 await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
 
-    @app_commands.command(name="add_scores", description="Add a Wordle score for a user")
+    @app_commands.command(name="add_scores", description="(Admin-Only) Add a Wordle score for a user")
     @app_commands.describe(
         user="User to adjust",
         wordle_number="Wordle number",
@@ -214,7 +214,7 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name="remove_scores", description="Remove a Wordle score for a user")
+    @app_commands.command(name="remove_scores", description="(Admin-Only) Remove a Wordle score for a user")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -248,7 +248,7 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name="import", description="Import Wordle scores from past messages in this channel")
+    @app_commands.command(name="import", description="(Admin-Only) Import Wordle scores from past messages in this channel")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def import_scores(self, interaction: discord.Interaction):
@@ -461,7 +461,7 @@ class AdminCog(commands.Cog):
             summary += f" Rejected {reject_count} out-of-range wordle numbers."
         await interaction.followup.send(summary)
 
-    @app_commands.command(name="add_crowns", description="Award a crown to a user for a specific Wordle")
+    @app_commands.command(name="add_crowns", description="(Admin-Only) Award a crown to a user for a specific Wordle")
     @app_commands.describe(
         user="User to adjust",
         wordle_number="Wordle number the crown is for",
@@ -553,7 +553,7 @@ class AdminCog(commands.Cog):
                 ephemeral=True,
             )
 
-    @app_commands.command(name="remove_crowns", description="Remove a user's crown for a specific Wordle")
+    @app_commands.command(name="remove_crowns", description="(Admin-Only) Remove a user's crown for a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -590,7 +590,7 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.command(name="void_wordle", description="Void a Wordle day — results won't count for anyone")
+    @app_commands.command(name="void_wordle", description="(Admin-Only) Void a Wordle day — results won't count for anyone")
     @app_commands.describe(wordle_number="Wordle number to void", reason="Why this day is being voided (optional)")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -619,7 +619,7 @@ class AdminCog(commands.Cog):
             f"Reason: {reason_str}."
         )
 
-    @app_commands.command(name="unvoid_wordle", description="Un-void a Wordle day — results count again")
+    @app_commands.command(name="unvoid_wordle", description="(Admin-Only) Un-void a Wordle day — results count again")
     @app_commands.describe(wordle_number="Wordle number to un-void")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -640,8 +640,6 @@ class AdminCog(commands.Cog):
         )
 
     @app_commands.command(name="voided_wordles", description="List all voided Wordle days")
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     async def voided_wordles_list(self, interaction: discord.Interaction):
         async with self.bot.pg_pool.acquire() as conn:
             rows = await conn.fetch(
@@ -661,7 +659,7 @@ class AdminCog(commands.Cog):
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="void_user_wordle", description="Void one user's result on a specific Wordle (e.g. cheating)")
+    @app_commands.command(name="void_user_wordle", description="(Admin-Only) Void one user's result on a specific Wordle (e.g. cheating)")
     @app_commands.describe(
         user="User whose result is being voided",
         wordle_number="Wordle number",
@@ -696,7 +694,7 @@ class AdminCog(commands.Cog):
             f"Reason: {reason_str}."
         )
 
-    @app_commands.command(name="unvoid_user_wordle", description="Restore one user's voided Wordle result")
+    @app_commands.command(name="unvoid_user_wordle", description="(Admin-Only) Restore one user's voided Wordle result")
     @app_commands.describe(user="User to restore", wordle_number="Wordle number")
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -724,8 +722,6 @@ class AdminCog(commands.Cog):
 
     @app_commands.command(name="voided_user_wordles", description="List per-user voided Wordle results")
     @app_commands.describe(user="Filter to a specific user (optional)")
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
     async def voided_user_wordles_list(
         self,
         interaction: discord.Interaction,

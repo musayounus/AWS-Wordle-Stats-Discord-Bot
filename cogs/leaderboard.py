@@ -4,7 +4,7 @@ from discord.ext import commands
 from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.parsing import calculate_streak
 from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set as _load_voided_set
-from utils.range_filters import MONTH_CHOICES, RANGE_CHOICES
+from utils.range_filters import MONTH_CHOICES
 
 class LeaderboardCog(commands.Cog):
     """Leaderboard display and personal stats commands."""
@@ -14,17 +14,15 @@ class LeaderboardCog(commands.Cog):
 
     @app_commands.command(name="leaderboard", description="Show Wordle leaderboard")
     @app_commands.describe(
-        range="Relative window: week, month, year (ignored if year/month are set)",
         year="Specific year to filter by (e.g. 2024)",
         month="Specific month to filter by (1–12); combined with year or current year",
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
         min_games="Only include users with at least this many games in the window",
     )
-    @app_commands.choices(range=RANGE_CHOICES, month=MONTH_CHOICES)
+    @app_commands.choices(month=MONTH_CHOICES)
     async def leaderboard(
         self,
         interaction: discord.Interaction,
-        range: app_commands.Choice[str] = None,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
         exclude_fails: bool = False,
@@ -34,7 +32,6 @@ class LeaderboardCog(commands.Cog):
         embed = await generate_leaderboard_embed(
             self.bot,
             user_id=interaction.user.id,
-            range=range.value if range else None,
             exclude_fails=exclude_fails,
             year=year,
             month=month.value if month else None,

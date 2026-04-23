@@ -27,7 +27,7 @@ class StreaksCog(commands.Cog):
         streak_count = calculate_streak(wordles, voided=voided)
         await interaction.followup.send(f"🔥 Your current streak is **{streak_count}** Wordles in a row.")
 
-    @app_commands.command(name="streaks", description="Top 10 Wordle streaks")
+    @app_commands.command(name="streaks", description="Top 15 Wordle streaks")
     async def streaks(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
         async with self.bot.pg_pool.acquire() as conn:
