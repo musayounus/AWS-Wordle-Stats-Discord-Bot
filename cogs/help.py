@@ -24,7 +24,8 @@ class HelpCog(commands.Cog):
                 "/stats [user] [exclude_fails] – See detailed personal Wordle stats\n"
                 "/crowns [year] [month] [min_games] – 👑 crown leaderboard\n"
                 "/uncontended [year] [month] [min_games] – 🥇 uncontested crown leaderboard\n"
-                "/fails_leaderboard [year] [month] [min_games] – 💀 fails leaderboard"
+                "/fails_leaderboard [year] [month] [min_games] – 💀 fails leaderboard\n"
+                "/monthly_winners – 🏆 1st-place winner of each past month"
             ),
             inline=False
         )

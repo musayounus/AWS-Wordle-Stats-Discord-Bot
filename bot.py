@@ -138,6 +138,7 @@ async def setup_hook():
         "cogs.uncontended_crowns",
         "cogs.banned_users",
         "cogs.fails",
+        "cogs.monthly_winners",
     ]
     for cog in COGS_LIST:
         try:
