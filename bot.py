@@ -115,6 +115,18 @@ async def setup_hook():
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_summary_log_posted_at ON summary_log (posted_at)"
         )
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_winners (
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                username TEXT NOT NULL,
+                avg_attempts NUMERIC,
+                games_played INTEGER,
+                recorded_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (year, month)
+            )
+        """)
 
     # 2) Load all cogs
     COGS_LIST = [

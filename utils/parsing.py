@@ -3,7 +3,7 @@ import datetime
 from zoneinfo import ZoneInfo
 
 import config
-from utils.admin_helpers import current_wordle_number, validate_wordle_number
+from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -313,7 +313,74 @@ async def parse_summary_message(bot, message):
             message.id, config.WORDLE_TZ, message.created_at,
         )
 
-    if not config.TESTING_MODE and not posted_this_week:
-        from utils.leaderboard import generate_leaderboard_embed
+        # First summary of a new calendar month (KSA-local) → post previous
+        # month's leaderboard with min_games=10 and crown the winner.
+        posted_this_month = await conn.fetchval(
+            """
+            SELECT 1 FROM summary_log
+            WHERE message_id <> $1
+              AND date_trunc('month', (posted_at AT TIME ZONE $2)::date)
+                  = date_trunc('month', ($3::timestamptz AT TIME ZONE $2)::date)
+            LIMIT 1
+            """,
+            message.id, config.WORDLE_TZ, message.created_at,
+        )
+
+        prev_winner = None
+        prev_year = prev_month_num = None
+        if not posted_this_month:
+            local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
+            last_of_prev = local_today.replace(day=1) - datetime.timedelta(days=1)
+            prev_year, prev_month_num = last_of_prev.year, last_of_prev.month
+            prev_winner = await conn.fetchrow(
+                f"""
+                SELECT
+                    s.user_id,
+                    MAX(s.username) AS username,
+                    ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
+                    COUNT(*) AS games_played
+                FROM scores s
+                WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
+                  AND {NOT_VOIDED_SQL.format(alias='s')}
+                  AND EXTRACT(YEAR FROM s.date) = $1
+                  AND EXTRACT(MONTH FROM s.date) = $2
+                GROUP BY s.user_id
+                HAVING COUNT(*) >= 10
+                ORDER BY avg_attempts ASC, games_played DESC
+                LIMIT 1
+                """,
+                prev_year, prev_month_num,
+            )
+            if prev_winner is not None:
+                await conn.execute(
+                    """
+                    INSERT INTO monthly_winners
+                        (year, month, user_id, username, avg_attempts, games_played)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (year, month) DO NOTHING
+                    """,
+                    prev_year, prev_month_num,
+                    prev_winner["user_id"], prev_winner["username"],
+                    prev_winner["avg_attempts"], prev_winner["games_played"],
+                )
+
+    if config.TESTING_MODE:
+        return
+
+    from utils.leaderboard import generate_leaderboard_embed
+
+    if not posted_this_week:
         embed = await generate_leaderboard_embed(bot)
         await message.channel.send(embed=embed)
+
+    if not posted_this_month and prev_winner is not None:
+        month_name = datetime.date(prev_year, prev_month_num, 1).strftime("%B %Y")
+        monthly_embed = await generate_leaderboard_embed(
+            bot, year=prev_year, month=prev_month_num, min_games=10,
+        )
+        await message.channel.send(embed=monthly_embed)
+        await message.channel.send(
+            f"🏆 Congratulations to <@{prev_winner['user_id']}> for taking "
+            f"**1st place in {month_name}** with an average of "
+            f"**{prev_winner['avg_attempts']}** over {prev_winner['games_played']} games! 🎉"
+        )
