@@ -300,8 +300,20 @@ async def parse_summary_message(bot, message):
             message.id, message.created_at, wordle_number, group_streak,
         )
 
-    # Send leaderboard update (suppressed in testing mode so friends don't see it)
-    if not config.TESTING_MODE:
+        # Post the all-time leaderboard only on the first summary of each ISO
+        # week (KSA-local), so the daily repost doesn't spam the channel.
+        posted_this_week = await conn.fetchval(
+            """
+            SELECT 1 FROM summary_log
+            WHERE message_id <> $1
+              AND date_trunc('week', (posted_at AT TIME ZONE $2)::date)
+                  = date_trunc('week', ($3::timestamptz AT TIME ZONE $2)::date)
+            LIMIT 1
+            """,
+            message.id, config.WORDLE_TZ, message.created_at,
+        )
+
+    if not config.TESTING_MODE and not posted_this_week:
         from utils.leaderboard import generate_leaderboard_embed
         embed = await generate_leaderboard_embed(bot)
         await message.channel.send(embed=embed)
