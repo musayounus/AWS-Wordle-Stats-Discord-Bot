@@ -26,6 +26,8 @@ class HelpCog(commands.Cog):
                 "/uncontended [year] [month] [min_games] [era] – 🥇 uncontested crown leaderboard\n"
                 "/fails_leaderboard [year] [month] [min_games] [era] – 💀 fails leaderboard\n"
                 "/monthly_winners [era] – 🏆 1st-place winner of each past month\n"
+                "/streak – 🔥 Show your current Wordle streak (current era only)\n"
+                "/streaks – 🔥 Top 15 streaks (current era only)\n"
                 "*era: `current` (Wordle #1777+, default) or `legacy` (pre-#1777)*"
             ),
             inline=False
