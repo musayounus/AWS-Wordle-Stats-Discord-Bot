@@ -332,37 +332,44 @@ async def parse_summary_message(bot, message):
             local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
             last_of_prev = local_today.replace(day=1) - datetime.timedelta(days=1)
             prev_year, prev_month_num = last_of_prev.year, last_of_prev.month
-            prev_winner = await conn.fetchrow(
-                f"""
-                SELECT
-                    s.user_id,
-                    MAX(s.username) AS username,
-                    ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
-                    COUNT(*) AS games_played
-                FROM scores s
-                WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
-                  AND {NOT_VOIDED_SQL.format(alias='s')}
-                  AND EXTRACT(YEAR FROM s.date) = $1
-                  AND EXTRACT(MONTH FROM s.date) = $2
-                GROUP BY s.user_id
-                HAVING COUNT(*) >= 10
-                ORDER BY avg_attempts ASC, games_played DESC
-                LIMIT 1
-                """,
-                prev_year, prev_month_num,
-            )
-            if prev_winner is not None:
-                await conn.execute(
-                    """
-                    INSERT INTO monthly_winners
-                        (year, month, user_id, username, avg_attempts, games_played)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (year, month) DO NOTHING
+            # Era cutover: skip the recap for any month entirely in the legacy
+            # era (April 2026 and earlier). First real monthly recap lands at
+            # the start of June 2026 covering May 2026.
+            if (prev_year, prev_month_num) <= (2026, 4):
+                prev_year = prev_month_num = None
+            else:
+                prev_winner = await conn.fetchrow(
+                    f"""
+                    SELECT
+                        s.user_id,
+                        MAX(s.username) AS username,
+                        ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
+                        COUNT(*) AS games_played
+                    FROM scores s
+                    WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
+                      AND {NOT_VOIDED_SQL.format(alias='s')}
+                      AND s.wordle_number >= {int(config.CURRENT_ERA_START_WORDLE)}
+                      AND EXTRACT(YEAR FROM s.date) = $1
+                      AND EXTRACT(MONTH FROM s.date) = $2
+                    GROUP BY s.user_id
+                    HAVING COUNT(*) >= 10
+                    ORDER BY avg_attempts ASC, games_played DESC
+                    LIMIT 1
                     """,
                     prev_year, prev_month_num,
-                    prev_winner["user_id"], prev_winner["username"],
-                    prev_winner["avg_attempts"], prev_winner["games_played"],
                 )
+                if prev_winner is not None:
+                    await conn.execute(
+                        """
+                        INSERT INTO monthly_winners
+                            (year, month, user_id, username, avg_attempts, games_played)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        ON CONFLICT (year, month) DO NOTHING
+                        """,
+                        prev_year, prev_month_num,
+                        prev_winner["user_id"], prev_winner["username"],
+                        prev_winner["avg_attempts"], prev_winner["games_played"],
+                    )
 
     if config.TESTING_MODE:
         return

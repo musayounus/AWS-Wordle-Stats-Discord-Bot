@@ -26,6 +26,11 @@ OFFICIAL_WORDLE_BOT_ID = int(os.getenv("OFFICIAL_WORDLE_BOT_ID", "12117814899314
 # posted late-night-local to land on the wrong calendar day.
 WORDLE_TZ = os.getenv("WORDLE_TZ", "Asia/Riyadh")
 
+# Era cutover: scores with wordle_number >= this value are "current era",
+# below it are "legacy". Default leaderboard/stats commands show current only;
+# legacy reachable via era=legacy param. Env-overridable for future cutovers.
+CURRENT_ERA_START_WORDLE = int(os.getenv("CURRENT_ERA_START_WORDLE", 1777))
+
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")
 RDS_SECRET_ARN   = os.getenv("RDS_SECRET_ARN")

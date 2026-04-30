@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.admin_helpers import NOT_VOIDED_SQL
-from utils.range_filters import MONTH_CHOICES, build_date_filter
+from utils.range_filters import MONTH_CHOICES, ERA_CHOICES, build_date_filter, build_era_filter
 
 class UncontendedCrownsCog(commands.Cog):
     """Leaderboard for solo first-place (uncontended) crowns."""
@@ -15,16 +15,19 @@ class UncontendedCrownsCog(commands.Cog):
         year="Specific year to filter by",
         month="Specific month (uses current year if year is omitted)",
         min_games="Only include users with at least this many games in the window",
+        era="current (Wordle #1777+, default) or legacy (pre-#1777)",
     )
-    @app_commands.choices(month=MONTH_CHOICES)
+    @app_commands.choices(month=MONTH_CHOICES, era=ERA_CHOICES)
     async def uncontended_crowns(
         self,
         interaction: discord.Interaction,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
         min_games: app_commands.Range[int, 1, 10000] = None,
+        era: app_commands.Choice[str] = None,
     ):
         await interaction.response.defer(thinking=True)
+        era_value = era.value if era else "current"
         date_filter, title_suffix = build_date_filter(
             year=year,
             month=month.value if month else None,
@@ -34,6 +37,8 @@ class UncontendedCrownsCog(commands.Cog):
             month=month.value if month else None,
             column="sc.date",
         )
+        era_filter, era_suffix = build_era_filter(era_value, column="s.wordle_number")
+        scores_era_filter, _ = build_era_filter(era_value, column="sc.wordle_number")
         min_games_clause = ""
         if min_games:
             min_games_clause = f"""
@@ -42,7 +47,7 @@ class UncontendedCrownsCog(commands.Cog):
                     WHERE sc.user_id = s.user_id
                       AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
                       AND {NOT_VOIDED_SQL.format(alias='sc')}
-                      {scores_date_filter}
+                      {scores_date_filter} {scores_era_filter}
                 ) >= {int(min_games)}
             """
         async with self.bot.pg_pool.acquire() as conn:
@@ -51,7 +56,7 @@ class UncontendedCrownsCog(commands.Cog):
                 FROM uncontended_crowns s
                 WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
                   AND {NOT_VOIDED_SQL.format(alias='s')}
-                  {date_filter}
+                  {date_filter} {era_filter}
                 GROUP BY s.user_id
                 {min_games_clause}
                 ORDER BY count DESC
@@ -71,6 +76,8 @@ class UncontendedCrownsCog(commands.Cog):
             title = "🥇 Uncontended Leaderboard 🥇"
             if title_suffix:
                 title += f" ({title_suffix})"
+            if era_suffix:
+                title += f" — {era_suffix}"
             if min_games:
                 title += f" — ≥{int(min_games)} games"
             embed = discord.Embed(

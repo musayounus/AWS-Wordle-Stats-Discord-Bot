@@ -2,9 +2,28 @@ import calendar
 
 from discord import app_commands
 
+import config
+
 MONTH_CHOICES = [
     app_commands.Choice(name=calendar.month_name[m], value=m) for m in range(1, 13)
 ]
+
+ERA_CHOICES = [
+    app_commands.Choice(name="current", value="current"),
+    app_commands.Choice(name="legacy", value="legacy"),
+]
+
+
+def build_era_filter(era="current", column="s.wordle_number"):
+    """Return (sql_fragment, title_suffix) for the given era.
+
+    current → wordle_number >= CURRENT_ERA_START_WORDLE (no title annotation)
+    legacy  → wordle_number <  CURRENT_ERA_START_WORDLE (title suffix "Legacy")
+    """
+    cutoff = int(config.CURRENT_ERA_START_WORDLE)
+    if era == "legacy":
+        return f"AND {column} < {cutoff}", "Legacy"
+    return f"AND {column} >= {cutoff}", None
 
 
 def build_date_filter(year=None, month=None, column="s.date"):

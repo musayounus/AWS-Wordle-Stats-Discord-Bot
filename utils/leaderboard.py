@@ -1,7 +1,7 @@
 import discord
 
 from utils.admin_helpers import NOT_VOIDED_SQL
-from utils.range_filters import build_date_filter
+from utils.range_filters import build_date_filter, build_era_filter
 
 # Penalty attempts value for X/6 fails in avg calculations. NULLs in scores.attempts
 # are substituted with this value so fails count against a user's avg.
@@ -15,12 +15,14 @@ async def generate_leaderboard_embed(
     year=None,
     month=None,
     min_games=None,
+    era="current",
 ):
     where_clause = (
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
     date_filter, title_suffix = build_date_filter(year=year, month=month)
+    era_filter, era_suffix = build_era_filter(era, column="s.wordle_number")
     min_clause = f"COUNT(*) >= {int(min_games)}" if min_games else "TRUE"
     having_min = f"HAVING {min_clause}" if min_games else ""
     having_min_and = f"AND {min_clause}" if min_games else ""
@@ -43,7 +45,7 @@ async def generate_leaderboard_embed(
                     MIN(s.attempts) FILTER (WHERE s.attempts IS NOT NULL) AS best_score,
                     {avg_expr} AS avg_attempts
                 FROM scores s
-                {where_clause} {date_filter}
+                {where_clause} {date_filter} {era_filter}
                 GROUP BY s.user_id
                 {having_min}
                 ORDER BY avg_attempts ASC NULLS LAST, games_played DESC
@@ -66,7 +68,7 @@ async def generate_leaderboard_embed(
                                 CASE WHEN {min_clause} THEN COUNT(*) END DESC NULLS LAST
                         ) AS rank
                     FROM scores s
-                    {where_clause} {date_filter}
+                    {where_clause} {date_filter} {era_filter}
                     GROUP BY s.user_id
                     HAVING s.user_id = $1 {having_min_and}
                 """, user_id)
@@ -76,6 +78,8 @@ async def generate_leaderboard_embed(
 
     title = "🏆 Wordle Leaderboard"
     title += f" ({title_suffix})" if title_suffix else " (All Time)"
+    if era_suffix:
+        title += f" — {era_suffix}"
     if exclude_fails:
         title += " — no-fail avg"
     if min_games:
