@@ -19,7 +19,7 @@ class MonthlyWinnersCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(
-        name="monthly_winners",
+        name="monthly_champions",
         description="Show the 1st-place winner of each past month",
     )
     @app_commands.describe(
