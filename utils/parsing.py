@@ -206,6 +206,7 @@ async def parse_summary_message(bot, message):
         cache = build_cache_from_mentions(message)
 
         results = []
+        unresolved = []
         for line in summary_lines:
             match = summary_pattern.search(line)
             if not match:
@@ -218,8 +219,16 @@ async def parse_summary_message(bot, message):
                     message.guild, token, cache=cache, conn=conn
                 )
                 if uid is None:
+                    unresolved.append(token[1])
                     continue
                 results.append((uid, uname, attempts))
+
+        if unresolved:
+            print(
+                f"⚠️ Wordle #{wordle_number}: skipped {len(unresolved)} "
+                f"unresolvable token(s): {unresolved}",
+                flush=True,
+            )
 
         crown_users = []
         for line in summary_lines:

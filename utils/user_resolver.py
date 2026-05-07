@@ -24,6 +24,13 @@ _TOKEN_RE = re.compile(
 _TRAILING_PUNCT = ".,;:!?"
 
 
+def _unescape_markdown(name: str) -> str:
+    # Discord plain-text mention fallbacks markdown-escape special chars in
+    # usernames (e.g. "M.A II" → "M\.A II", "foo_bar" → "foo\_bar"). Reverse
+    # any backslash-escape so the token matches the user's real display name.
+    return re.sub(r"\\(.)", r"\1", name)
+
+
 def extract_user_tokens(text: str) -> List[UserToken]:
     tokens: List[UserToken] = []
     if not text:
@@ -32,7 +39,7 @@ def extract_user_tokens(text: str) -> List[UserToken]:
         if m.group("id"):
             tokens.append(("id", int(m.group("id"))))
         elif m.group("name") is not None:
-            name = m.group("name").rstrip(_TRAILING_PUNCT)
+            name = _unescape_markdown(m.group("name")).rstrip(_TRAILING_PUNCT)
             if name:
                 tokens.append(("name", name))
     return tokens
@@ -189,6 +196,12 @@ if __name__ == "__main__":
         ("3/6: @Crazy Boy @ENDLESS", [("name", "Crazy Boy"), ("name", "ENDLESS")]),
         ("X/6: @Sabershark", [("name", "Sabershark")]),
         ("<@111111111111111111> @Crazy Boy", [("id", 111111111111111111), ("name", "Crazy Boy")]),
+        # Markdown-escaped plain-text mentions (Discord fallback when the @ doesn't render)
+        (r"@M\.A II", [("name", "M.A II")]),
+        (r"4/6: @M\.A II", [("name", "M.A II")]),
+        (r"@foo\_bar", [("name", "foo_bar")]),
+        (r"@a\.b\.c", [("name", "a.b.c")]),
+        (r"3/6: @M\.A II @ENDLESS", [("name", "M.A II"), ("name", "ENDLESS")]),
     ]
     failed = 0
     for text, expected in cases:
