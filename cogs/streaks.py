@@ -22,7 +22,7 @@ class StreaksCog(commands.Cog):
             rows = await conn.fetch(f"""
                 SELECT wordle_number
                 FROM scores s
-                WHERE s.user_id = $1 AND s.attempts IS NOT NULL
+                WHERE s.user_id = $1
                   AND s.user_id NOT IN (SELECT user_id FROM banned_users)
                   AND {NOT_VOIDED_SQL.format(alias='s')}
                   {era_filter}
@@ -44,8 +44,7 @@ class StreaksCog(commands.Cog):
             users = await conn.fetch(f"""
                 SELECT DISTINCT user_id, username
                 FROM scores s
-                WHERE s.attempts IS NOT NULL
-                  AND s.user_id NOT IN (SELECT user_id FROM banned_users)
+                WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
                   AND {NOT_VOIDED_SQL.format(alias='s')}
                   {era_filter}
             """)
@@ -56,7 +55,7 @@ class StreaksCog(commands.Cog):
                 wordles = await conn.fetch(f"""
                     SELECT wordle_number
                     FROM scores s
-                    WHERE s.user_id = $1 AND s.attempts IS NOT NULL
+                    WHERE s.user_id = $1
                       AND s.user_id NOT IN (SELECT user_id FROM banned_users)
                       AND {NOT_VOIDED_SQL.format(alias='s')}
                       {era_filter}
