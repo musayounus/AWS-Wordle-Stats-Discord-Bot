@@ -309,6 +309,67 @@ async def parse_summary_message(bot, message):
             message.id, message.created_at, wordle_number, group_streak,
         )
 
+        # Snapshot current-era ranking and diff vs the latest prior snapshot,
+        # so the auto-post below can show ⬆️/⬇️ arrows when ranks change.
+        current_ranks = await conn.fetch(f"""
+            SELECT
+                s.user_id,
+                MAX(s.username) AS username,
+                COUNT(*) AS games_played,
+                ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
+                RANK() OVER (
+                    ORDER BY ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) ASC NULLS LAST,
+                             COUNT(*) DESC
+                ) AS rank
+            FROM scores s
+            WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
+              AND {NOT_VOIDED_SQL.format(alias='s')}
+              AND s.wordle_number >= {int(config.CURRENT_ERA_START_WORDLE)}
+            GROUP BY s.user_id
+        """)
+
+        prior = await conn.fetch(
+            """
+            SELECT user_id, rank
+            FROM leaderboard_snapshots
+            WHERE wordle_number = (
+                SELECT MAX(wordle_number) FROM leaderboard_snapshots
+                WHERE wordle_number < $1
+            )
+            """,
+            wordle_number,
+        )
+        prior_by_user = {r["user_id"]: r["rank"] for r in prior}
+
+        deltas = {}
+        for r in current_ranks:
+            yr = prior_by_user.get(r["user_id"])
+            if yr is None:
+                continue
+            d = yr - r["rank"]
+            if d != 0:
+                deltas[r["user_id"]] = d
+
+        if current_ranks:
+            await conn.executemany(
+                """
+                INSERT INTO leaderboard_snapshots
+                    (wordle_number, user_id, rank, avg_attempts, games_played)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (wordle_number, user_id) DO UPDATE
+                  SET rank = EXCLUDED.rank,
+                      avg_attempts = EXCLUDED.avg_attempts,
+                      games_played = EXCLUDED.games_played
+                """,
+                [
+                    (wordle_number, r["user_id"], r["rank"],
+                     r["avg_attempts"], r["games_played"])
+                    for r in current_ranks
+                ],
+            )
+
+        ranks_changed = bool(deltas) and bool(prior_by_user)
+
         # Post the all-time leaderboard only on the first summary of each ISO
         # week (KSA-local), so the daily repost doesn't spam the channel.
         posted_this_week = await conn.fetchval(
@@ -385,7 +446,13 @@ async def parse_summary_message(bot, message):
 
     from utils.leaderboard import generate_leaderboard_embed
 
-    if not posted_this_week:
+    posted_deltas = False
+    if ranks_changed:
+        embed = await generate_leaderboard_embed(bot, deltas=deltas)
+        await message.channel.send(embed=embed)
+        posted_deltas = True
+
+    if not posted_this_week and not posted_deltas:
         embed = await generate_leaderboard_embed(bot)
         await message.channel.send(embed=embed)
 

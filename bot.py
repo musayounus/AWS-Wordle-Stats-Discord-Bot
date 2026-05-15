@@ -127,6 +127,21 @@ async def setup_hook():
                 PRIMARY KEY (year, month)
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
+                wordle_number INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                rank INTEGER NOT NULL,
+                avg_attempts NUMERIC,
+                games_played INTEGER,
+                captured_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (wordle_number, user_id)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshots_wordle "
+            "ON leaderboard_snapshots (wordle_number DESC)"
+        )
 
     # 2) Load all cogs
     COGS_LIST = [

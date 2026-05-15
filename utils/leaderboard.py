@@ -16,6 +16,7 @@ async def generate_leaderboard_embed(
     month=None,
     min_games=None,
     era="current",
+    deltas=None,
 ):
     where_clause = (
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
@@ -92,12 +93,20 @@ async def generate_leaderboard_embed(
         for idx, row in enumerate(leaderboard_rows, start=1):
             emoji_best = "🧠" if row['best_score'] == 1 else ""
             emoji_fail = "💀" if row['fails'] > 0 else ""
-            
+
             avg_score = f"{row['avg_attempts']:.2f}" if row['avg_attempts'] is not None else "—"
             best_score = row['best_score'] or "—"
-            
+
+            arrow = ""
+            if deltas:
+                d = deltas.get(row["user_id"], 0)
+                if d > 0:
+                    arrow = f"⬆️ {d} " if d > 1 else "⬆️ "
+                elif d < 0:
+                    arrow = f"⬇️ {-d} " if d < -1 else "⬇️ "
+
             embed.add_field(
-                name=f"#{idx} {row['username']}",
+                name=f"#{idx} {arrow}{row['username']}",
                 value=(f"Avg: {avg_score} | Best: {best_score} {emoji_best}\n"
                        f"Games: {row['games_played']} | Fails: {row['fails']} {emoji_fail}"),
                 inline=False
