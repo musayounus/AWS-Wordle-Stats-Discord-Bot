@@ -6,6 +6,9 @@
 
 import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+import config
 
 
 WORDLE_START = datetime.date(2021, 6, 19)
@@ -24,7 +27,16 @@ NOT_VOIDED_SQL = (
 
 
 def current_wordle_number(today: Optional[datetime.date] = None) -> int:
-    return ((today or datetime.date.today()) - WORDLE_START).days
+    """Today's Wordle number, in the Wordle timezone.
+
+    Summaries are numbered from their WORDLE_TZ-local day, so this must use the
+    same clock. Using the host clock (UTC) left this one behind the newest
+    stored wordle for the last few hours of every KSA day, which silently
+    dropped that day from streaks and made admin commands reject it as future.
+    """
+    if today is None:
+        today = datetime.datetime.now(ZoneInfo(config.WORDLE_TZ)).date()
+    return (today - WORDLE_START).days
 
 
 def wordle_date_for_number(wordle_number: int) -> datetime.date:

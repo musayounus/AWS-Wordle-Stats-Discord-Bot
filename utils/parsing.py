@@ -191,18 +191,42 @@ async def parse_summary_message(bot, message):
         if existing is not None:
             return
 
-        # Chain: if another summary was posted before this one and already
-        # claimed the tentative wordle, advance by one. Resolves two-summaries-
-        # in-one-day when a traveling user triggers the next wordle early.
-        last_wordle = await conn.fetchval(
-            "SELECT MAX(wordle_number) FROM summary_log WHERE posted_at < $1",
-            message.created_at,
+        # Anchor the number on the play date, never on the last stored number.
+        # The previous version chained off MAX(wordle_number), so any one-off
+        # bump fed into the next day's calculation and the offset could only
+        # grow — it reached +5 before the 2026-09 resync migration.
+        wordle_number = tentative_wordle
+        claimed = await conn.fetchrow(
+            """
+            SELECT group_streak FROM summary_log
+            WHERE wordle_number = $1 ORDER BY posted_at LIMIT 1
+            """,
+            tentative_wordle,
         )
-        if last_wordle is not None and tentative_wordle <= last_wordle:
-            wordle_number = last_wordle + 1
-            date = wordle_start + datetime.timedelta(days=wordle_number)
-        else:
-            wordle_number = tentative_wordle
+        if claimed is not None:
+            # This day is already recorded, so this is a second summary. Either:
+            #   * the Wordle app posting tomorrow's results late tonight, once a
+            #     player in a later timezone triggers the next puzzle — the group
+            #     streak continues the series, so it really is the next wordle; or
+            #   * a duplicate summary source, whose group streak restarts from 1 —
+            #     same day, so let its results merge into the day already recorded
+            #     instead of inventing a new one.
+            prev_streak = claimed["group_streak"]
+            if (
+                group_streak is not None
+                and prev_streak is not None
+                and group_streak == prev_streak + 1
+            ):
+                wordle_number = tentative_wordle + 1
+
+        # Hard ceiling: a summary can never describe a puzzle that has not
+        # happened yet. This is the backstop that makes unbounded drift
+        # impossible even if the group-streak signal is missing or wrong.
+        ceiling = current_wordle_number(local_date)
+        if wordle_number > ceiling:
+            wordle_number = ceiling
+
+        date = wordle_start + datetime.timedelta(days=wordle_number)
 
         cache = build_cache_from_mentions(message)
 
