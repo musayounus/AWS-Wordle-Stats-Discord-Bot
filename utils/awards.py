@@ -460,8 +460,9 @@ async def compute_awards(conn, start, end, min_games):
             "user_id": sol["user_id"], "username": sol["username"],
             "metric": sol["metric"], "games_played": None,
             "detail": (
-                f"{shown}/6 on Wordle #{sol['wordle_number']} ({sol['date']}) "
-                f"while {sol['others']} others averaged {sol['others_avg']}"
+                f"{shown}/6 on Wordle #{sol['wordle_number']} ({sol['date']}) — "
+                f"the rest of the group averaged {sol['others_avg']} "
+                f"across {sol['others']} players"
             ),
         }
 
@@ -482,7 +483,8 @@ async def compute_awards(conn, start, end, min_games):
         awards["metronome"] = {
             "user_id": met["user_id"], "username": met["username"],
             "metric": met["metric"], "games_played": met["games_played"],
-            "detail": (f"spread of {met['metric']} around a {met['avg_att']} average "
+            "detail": (f"most consistent scorer — results typically land within "
+                       f"{met['metric']} of their {met['avg_att']} average, "
                        f"over {met['games_played']} games"),
         }
 
@@ -573,8 +575,15 @@ def award_embed(period_type, year, period, awards):
         elif category == "uncontended":
             value = f"<@{a['user_id']}> — **{a['metric']}** solo first places"
         elif category == "solve":
-            value = (f"<@{a['user_id']}> — {a['detail']}\n"
-                     f"**{a['metric']}** better than the field")
+            # Split the detail so the day and the comparison sit on their own
+            # lines, matching how the Hardest Wordle award reads.
+            where, _, versus = a["detail"].partition(" — ")
+            value = (f"<@{a['user_id']}> — {where}\n"
+                     f"{versus[:1].upper()}{versus[1:]} — **{a['metric']}** better.")
+        elif category == "metronome":
+            value = (f"<@{a['user_id']}> — the most consistent scorer in the group.\n"
+                     f"Results typically land within **{a['metric']}** of their own "
+                     f"average — very few disaster days ({a['games_played']} games).")
         elif category == "streak":
             value = f"<@{a['user_id']}> — **{a['metric']}** days in a row"
         elif category == "hardest":
