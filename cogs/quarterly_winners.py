@@ -2,8 +2,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.quarterly import CATEGORIES
-
 # Display order and labels for the four awards, keyed by the `category` column.
 LABELS = {
     "champion": ("🏆", "Champion"),
@@ -37,7 +35,7 @@ class QuarterlyWinnersCog(commands.Cog):
         if not rows:
             await interaction.followup.send(
                 "📅 No quarterly awards recorded yet — the first lands at the "
-                "start of October 2026, covering Q3."
+                "start of January 2027, covering Q4 2026."
             )
             return
 

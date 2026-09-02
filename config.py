@@ -41,6 +41,12 @@ MONTHLY_MIN_GAMES = int(os.getenv("MONTHLY_MIN_GAMES", 23))
 # 3x the monthly floor, i.e. roughly 75% attendance over a ~92-day quarter.
 QUARTERLY_MIN_GAMES = int(os.getenv("QUARTERLY_MIN_GAMES", 69))
 
+# First quarter ever scored. Earlier quarters are never announced even though
+# their data exists, so tracking starts cleanly at Q4 2026 (Oct 1 - Dec 31),
+# announced on 1 January 2027. Env-overridable.
+QUARTERLY_FIRST_YEAR = int(os.getenv("QUARTERLY_FIRST_YEAR", 2026))
+QUARTERLY_FIRST_QUARTER = int(os.getenv("QUARTERLY_FIRST_QUARTER", 4))
+
 # "Solve of the quarter" compares a score against everyone else who played that
 # day. Days with fewer than this many *other* players are ignored, so a thin day
 # can't produce a huge delta from noise.

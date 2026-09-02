@@ -439,9 +439,8 @@ async def parse_summary_message(bot, message):
         if not posted_this_quarter:
             local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
             q_year, q_num = quarterly.previous_quarter(local_today)
-            # Skip any quarter the era started partway through — scoring it
-            # would use incomplete data.
-            if quarterly.quarter_in_era(q_year, q_num):
+            # Tracking starts at Q4 2026; earlier quarters are never announced.
+            if quarterly.quarter_eligible(q_year, q_num):
                 awards = await quarterly.compute_awards(conn, q_year, q_num)
                 if awards:
                     await quarterly.record_awards(conn, q_year, q_num, awards)

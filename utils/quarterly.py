@@ -14,7 +14,7 @@ voided wordles, matching the rest of the leaderboards.
 import datetime
 
 import config
-from utils.admin_helpers import NOT_VOIDED_SQL, WORDLE_START
+from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.leaderboard import FAIL_PENALTY
 
 CATEGORIES = ("average", "uncontended", "solve", "champion")
@@ -38,23 +38,17 @@ def previous_quarter(d: datetime.date):
     return (d.year - 1, 4) if q == 1 else (d.year, q - 1)
 
 
-def era_start_date() -> datetime.date:
-    return WORDLE_START + datetime.timedelta(days=int(config.CURRENT_ERA_START_WORDLE))
+def quarter_eligible(year: int, quarter: int) -> bool:
+    """Awards start at QUARTERLY_FIRST_* and run every quarter after.
 
-
-def quarter_in_era(year: int, quarter: int) -> bool:
-    """True only if the whole quarter falls inside the current era.
-
-    A quarter the era started partway through would be scored on incomplete
-    data, so it is skipped entirely — the same reasoning that makes the monthly
-    recap skip April 2026 and earlier.
+    Earlier quarters are never announced, even where the data exists: tracking
+    begins at Q4 2026, so nothing fires on 1 October 2026 — that day only starts
+    the first tracked quarter, which is announced on 1 January 2027.
     """
-    start, _ = quarter_bounds(year, quarter)
-    return start >= era_start_date()
-
-
-_ERA = "s.wordle_number >= {cutoff}"
-_NOT_BANNED = "s.user_id NOT IN (SELECT user_id FROM banned_users)"
+    return (year, quarter) >= (
+        config.QUARTERLY_FIRST_YEAR,
+        config.QUARTERLY_FIRST_QUARTER,
+    )
 
 
 def _scope(alias="s"):
