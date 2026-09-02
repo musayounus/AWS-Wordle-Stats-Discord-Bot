@@ -13,16 +13,15 @@ LABELS = {
     "metronome": ("🎯", "The Metronome"),
     "improved": ("📈", "Most Improved"),
     "streak": ("🔥", "Longest Streak"),
-    "unbroken": ("🛡️", "Unbroken"),
     "best_month": ("📅", "Best Month"),
     "hardest": ("💀", "Hardest Wordle"),
 }
 ORDER = ("champion", "average", "uncontended", "solve", "metronome",
-         "improved", "streak", "unbroken", "best_month", "hardest")
+         "improved", "streak", "best_month", "hardest")
 
 
 class PeriodAwardsCog(commands.Cog):
-    """Show the four award winners of each past quarter and year."""
+    """Show the award winners of each past quarter and year."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -79,7 +78,7 @@ class PeriodAwardsCog(commands.Cog):
 
     @app_commands.command(
         name="quarterly_champions",
-        description="Show the four award winners of each past quarter",
+        description="Show the award winners of each past quarter",
     )
     async def quarterly_champions(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
@@ -91,7 +90,7 @@ class PeriodAwardsCog(commands.Cog):
 
     @app_commands.command(
         name="yearly_champions",
-        description="Show the four award winners of each past year",
+        description="Show the award winners of each past year",
     )
     async def yearly_champions(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)

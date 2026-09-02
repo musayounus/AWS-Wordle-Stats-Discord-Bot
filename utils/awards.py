@@ -1,12 +1,17 @@
 """Period award calculations, shared by the quarterly and yearly awards.
 
-Four awards are computed over a completed period and announced on the first
+Nine awards are computed over a completed period and announced on the first
 summary of the next one:
 
+  champion     — weighted composite across average, crowns, solve, participation
   average      — best (lowest) average, subject to a games floor
   uncontended  — most solo first places
   solve        — most impressive single day, relative to everyone else that day
-  champion     — weighted composite across all of the above plus participation
+  metronome    — lowest spread of scores, i.e. never a disaster round
+  improved     — biggest drop in average from the first half to the second
+  streak       — longest consecutive run of days played
+  best_month   — strongest calendar month inside the period
+  hardest      — the day the group collectively struggled most (no player)
 
 Every query is scoped to the current era, excludes banned users, and honours
 voided wordles, matching the rest of the leaderboards.
@@ -22,7 +27,7 @@ from utils.leaderboard import FAIL_PENALTY
 
 CATEGORIES = (
     "champion", "average", "uncontended", "solve",
-    "metronome", "improved", "streak", "unbroken", "best_month", "hardest",
+    "metronome", "improved", "streak", "best_month", "hardest",
 )
 
 # Announcement order, with the label for each period type.
@@ -34,7 +39,6 @@ _FIELDS = (
     ("metronome", "🎯", "The Metronome", "The Metronome"),
     ("improved", "📈", "Most Improved", "Most Improved"),
     ("streak", "🔥", "Longest Streak", "Longest Streak"),
-    ("unbroken", "🛡️", "Unbroken", "Unbroken"),
     ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year"),
     ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year"),
 )
@@ -226,29 +230,6 @@ async def most_improved(conn, start, end, min_games):
         LIMIT 1
         """,
         start, end, midpoint,
-    )
-
-
-async def unbroken(conn, start, end):
-    """Played every single day the group played. Often nobody qualifies."""
-    return await conn.fetchrow(
-        f"""
-        WITH days AS (
-            SELECT COUNT(DISTINCT s.wordle_number) AS total FROM scores s
-            WHERE {_scope()} AND s.date >= $1 AND s.date < $2
-        )
-        SELECT s.user_id, MAX(s.username) AS username,
-               COUNT(DISTINCT s.wordle_number) AS metric,
-               COUNT(*) AS games_played,
-               (SELECT total FROM days) AS total_days
-        FROM scores s
-        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
-        GROUP BY s.user_id
-        HAVING COUNT(DISTINCT s.wordle_number) = (SELECT total FROM days)
-        ORDER BY s.user_id ASC
-        LIMIT 1
-        """,
-        start, end,
     )
 
 
@@ -522,14 +503,6 @@ async def compute_awards(conn, start, end, min_games):
             "detail": f"{st['metric']} days in a row",
         }
 
-    unb = await unbroken(conn, start, end)
-    if unb is not None:
-        awards["unbroken"] = {
-            "user_id": unb["user_id"], "username": unb["username"],
-            "metric": unb["metric"], "games_played": unb["games_played"],
-            "detail": f"played all {unb['total_days']} days — never missed one",
-        }
-
     bm = await best_month(conn, start, end)
     if bm is not None:
         month_name = datetime.date(bm["yr"], bm["mon"], 1).strftime("%B")
@@ -577,7 +550,7 @@ def period_label(period_type, year, period):
 
 
 def award_embed(period_type, year, period, awards):
-    """One embed carrying all four awards. Returns None if nothing qualified."""
+    """One embed carrying every award won. Returns None if nothing qualified."""
     if not awards:
         return None
     label = period_label(period_type, year, period)
@@ -604,8 +577,6 @@ def award_embed(period_type, year, period, awards):
                      f"**{a['metric']}** better than the field")
         elif category == "streak":
             value = f"<@{a['user_id']}> — **{a['metric']}** days in a row"
-        elif category == "unbroken":
-            value = f"<@{a['user_id']}> — {a['detail']}"
         elif category == "hardest":
             # No player: this award describes the day itself.
             value = a["detail"]
