@@ -128,6 +128,20 @@ async def setup_hook():
             )
         """)
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS quarterly_winners (
+                year INTEGER NOT NULL,
+                quarter INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                user_id BIGINT NOT NULL,
+                username TEXT NOT NULL,
+                metric NUMERIC,
+                detail TEXT,
+                games_played INTEGER,
+                recorded_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (year, quarter, category)
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
                 wordle_number INTEGER NOT NULL,
                 user_id BIGINT NOT NULL,
@@ -154,6 +168,7 @@ async def setup_hook():
         "cogs.banned_users",
         "cogs.fails",
         "cogs.monthly_winners",
+        "cogs.quarterly_winners",
         "cogs.streaks",
     ]
     for cog in COGS_LIST:

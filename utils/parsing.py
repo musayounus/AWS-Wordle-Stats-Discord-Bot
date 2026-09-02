@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.leaderboard import FAIL_PENALTY
+from utils import quarterly
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -421,6 +422,31 @@ async def parse_summary_message(bot, message):
             message.id, config.WORDLE_TZ, message.created_at,
         )
 
+        # First summary of a new calendar quarter (KSA-local) → the four
+        # quarterly awards for the quarter that just ended.
+        posted_this_quarter = await conn.fetchval(
+            """
+            SELECT 1 FROM summary_log
+            WHERE message_id <> $1
+              AND date_trunc('quarter', (posted_at AT TIME ZONE $2)::date)
+                  = date_trunc('quarter', ($3::timestamptz AT TIME ZONE $2)::date)
+            LIMIT 1
+            """,
+            message.id, config.WORDLE_TZ, message.created_at,
+        )
+
+        quarterly_messages = []
+        if not posted_this_quarter:
+            local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
+            q_year, q_num = quarterly.previous_quarter(local_today)
+            # Skip any quarter the era started partway through — scoring it
+            # would use incomplete data.
+            if quarterly.quarter_in_era(q_year, q_num):
+                awards = await quarterly.compute_awards(conn, q_year, q_num)
+                if awards:
+                    await quarterly.record_awards(conn, q_year, q_num, awards)
+                    quarterly_messages = quarterly.announcements(q_year, q_num, awards)
+
         prev_winner = None
         prev_year = prev_month_num = None
         if not posted_this_month:
@@ -493,3 +519,8 @@ async def parse_summary_message(bot, message):
             f"**1st place in {month_name}** with an average of "
             f"**{prev_winner['avg_attempts']}** over {prev_winner['games_played']} games! 🎉"
         )
+
+    # Quarter boundaries are also month boundaries, so these land after the
+    # monthly recap on the same day.
+    for text in quarterly_messages:
+        await message.channel.send(text)

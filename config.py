@@ -36,6 +36,26 @@ CURRENT_ERA_START_WORDLE = int(os.getenv("CURRENT_ERA_START_WORDLE", 1777))
 # crowned user is always the top row of the board posted beside it.
 MONTHLY_MIN_GAMES = int(os.getenv("MONTHLY_MIN_GAMES", 23))
 
+# ── Quarterly awards ──────────────────────────────────────────────────────────
+# Minimum games in a quarter to qualify for the average and champion awards.
+# 3x the monthly floor, i.e. roughly 75% attendance over a ~92-day quarter.
+QUARTERLY_MIN_GAMES = int(os.getenv("QUARTERLY_MIN_GAMES", 69))
+
+# "Solve of the quarter" compares a score against everyone else who played that
+# day. Days with fewer than this many *other* players are ignored, so a thin day
+# can't produce a huge delta from noise.
+SOLVE_MIN_OTHERS = int(os.getenv("SOLVE_MIN_OTHERS", 3))
+
+# Champion of the quarter: each component is min-max normalised to 0-100 across
+# the qualifying field, then weighted by these. Must sum to 100.
+CHAMPION_WEIGHTS = {
+    "avg": int(os.getenv("CHAMPION_WEIGHT_AVG", 40)),
+    "crowns": int(os.getenv("CHAMPION_WEIGHT_CROWNS", 25)),
+    "uncons": int(os.getenv("CHAMPION_WEIGHT_UNCONS", 15)),
+    "solve": int(os.getenv("CHAMPION_WEIGHT_SOLVE", 10)),
+    "games": int(os.getenv("CHAMPION_WEIGHT_GAMES", 10)),
+}
+
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")
 RDS_SECRET_ARN   = os.getenv("RDS_SECRET_ARN")
