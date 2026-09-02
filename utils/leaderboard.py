@@ -49,7 +49,7 @@ async def generate_leaderboard_embed(
                 {where_clause} {date_filter} {era_filter}
                 GROUP BY s.user_id
                 {having_min}
-                ORDER BY avg_attempts ASC NULLS LAST, games_played DESC
+                ORDER BY avg_attempts ASC NULLS LAST, games_played DESC, s.user_id ASC
                 LIMIT 15
             """)
 

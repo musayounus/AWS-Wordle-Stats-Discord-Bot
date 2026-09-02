@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
+from utils.leaderboard import FAIL_PENALTY
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -316,9 +317,9 @@ async def parse_summary_message(bot, message):
                 s.user_id,
                 MAX(s.username) AS username,
                 COUNT(*) AS games_played,
-                ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
+                ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts,
                 RANK() OVER (
-                    ORDER BY ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) ASC NULLS LAST,
+                    ORDER BY ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) ASC NULLS LAST,
                              COUNT(*) DESC
                 ) AS rank
             FROM scores s
@@ -413,7 +414,7 @@ async def parse_summary_message(bot, message):
                     SELECT
                         s.user_id,
                         MAX(s.username) AS username,
-                        ROUND(AVG(COALESCE(s.attempts, 7))::numeric, 2) AS avg_attempts,
+                        ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_attempts,
                         COUNT(*) AS games_played
                     FROM scores s
                     WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
@@ -423,7 +424,7 @@ async def parse_summary_message(bot, message):
                       AND EXTRACT(MONTH FROM s.date) = $2
                     GROUP BY s.user_id
                     HAVING COUNT(*) >= {int(config.MONTHLY_MIN_GAMES)}
-                    ORDER BY avg_attempts ASC, games_played DESC
+                    ORDER BY avg_attempts ASC, games_played DESC, s.user_id ASC
                     LIMIT 1
                     """,
                     prev_year, prev_month_num,
