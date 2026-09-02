@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.leaderboard import FAIL_PENALTY
-from utils import quarterly
+from utils import awards as awards_mod
 from utils.user_resolver import (
     build_cache_from_mentions,
     extract_user_tokens,
@@ -435,16 +435,47 @@ async def parse_summary_message(bot, message):
             message.id, config.WORDLE_TZ, message.created_at,
         )
 
-        quarterly_messages = []
+        # First summary of a new calendar year (KSA-local) → the same four
+        # awards over the year that just ended.
+        posted_this_year = await conn.fetchval(
+            """
+            SELECT 1 FROM summary_log
+            WHERE message_id <> $1
+              AND date_trunc('year', (posted_at AT TIME ZONE $2)::date)
+                  = date_trunc('year', ($3::timestamptz AT TIME ZONE $2)::date)
+            LIMIT 1
+            """,
+            message.id, config.WORDLE_TZ, message.created_at,
+        )
+
+        local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
+        award_embeds = []
+
         if not posted_this_quarter:
-            local_today = message.created_at.astimezone(ZoneInfo(config.WORDLE_TZ)).date()
-            q_year, q_num = quarterly.previous_quarter(local_today)
-            # Tracking starts at Q4 2026; earlier quarters are never announced.
-            if quarterly.quarter_eligible(q_year, q_num):
-                awards = await quarterly.compute_awards(conn, q_year, q_num)
-                if awards:
-                    await quarterly.record_awards(conn, q_year, q_num, awards)
-                    quarterly_messages = quarterly.announcements(q_year, q_num, awards)
+            q_year, q_num = awards_mod.previous_quarter(local_today)
+            # Starts at Q3 2026; every quarter after that, indefinitely.
+            if awards_mod.quarter_eligible(q_year, q_num):
+                start, end = awards_mod.quarter_bounds(q_year, q_num)
+                won = await awards_mod.compute_awards(
+                    conn, start, end, config.QUARTERLY_MIN_GAMES
+                )
+                if won:
+                    await awards_mod.record_awards(conn, "quarter", q_year, q_num, won)
+                    award_embeds.append(
+                        awards_mod.award_embed("quarter", q_year, q_num, won)
+                    )
+
+        if not posted_this_year:
+            y = awards_mod.previous_year(local_today)
+            if awards_mod.year_eligible(y):
+                start, end = awards_mod.year_bounds(y)
+                # Proportional floor: year windows vary in length, so it is
+                # derived from the days actually available in the window.
+                floor = await awards_mod.yearly_min_games(conn, start, end)
+                won = await awards_mod.compute_awards(conn, start, end, floor)
+                if won:
+                    await awards_mod.record_awards(conn, "year", y, 0, won)
+                    award_embeds.append(awards_mod.award_embed("year", y, 0, won))
 
         prev_winner = None
         prev_year = prev_month_num = None
@@ -519,7 +550,7 @@ async def parse_summary_message(bot, message):
             f"**{prev_winner['avg_attempts']}** over {prev_winner['games_played']} games! 🎉"
         )
 
-    # Quarter boundaries are also month boundaries, so these land after the
-    # monthly recap on the same day.
-    for text in quarterly_messages:
-        await message.channel.send(text)
+    # Quarter and year boundaries are also month boundaries, so these land
+    # after the monthly recap on the same day: quarter first, then year.
+    for embed in award_embeds:
+        await message.channel.send(embed=embed)

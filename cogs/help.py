@@ -27,6 +27,7 @@ class HelpCog(commands.Cog):
                 "/fails_leaderboard [year] [month] [min_games] [era] – 💀 fails leaderboard\n"
                 "/monthly_champions [era] – 🏆 1st-place winner of each past month\n"
                 "/quarterly_champions – 🏆 the four award winners of each past quarter\n"
+                "/yearly_champions – 🏆 the four award winners of each past year\n"
                 "/streak – 🔥 Show your current Wordle streak (current era only)\n"
                 "/streaks – 🔥 Top 15 streaks (current era only)\n"
                 "*era: `current` (Wordle #1777+, default) or `legacy` (pre-#1777)*"

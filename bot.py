@@ -127,10 +127,14 @@ async def setup_hook():
                 PRIMARY KEY (year, month)
             )
         """)
+        # Superseded by period_awards, which also covers yearly. Never held any
+        # rows — the quarterly feature had not fired before the switch.
+        await conn.execute("DROP TABLE IF EXISTS quarterly_winners")
         await conn.execute("""
-            CREATE TABLE IF NOT EXISTS quarterly_winners (
+            CREATE TABLE IF NOT EXISTS period_awards (
+                period_type TEXT NOT NULL,
                 year INTEGER NOT NULL,
-                quarter INTEGER NOT NULL,
+                period INTEGER NOT NULL,
                 category TEXT NOT NULL,
                 user_id BIGINT NOT NULL,
                 username TEXT NOT NULL,
@@ -138,7 +142,7 @@ async def setup_hook():
                 detail TEXT,
                 games_played INTEGER,
                 recorded_at TIMESTAMPTZ DEFAULT NOW(),
-                PRIMARY KEY (year, quarter, category)
+                PRIMARY KEY (period_type, year, period, category)
             )
         """)
         await conn.execute("""
@@ -168,7 +172,7 @@ async def setup_hook():
         "cogs.banned_users",
         "cogs.fails",
         "cogs.monthly_winners",
-        "cogs.quarterly_winners",
+        "cogs.period_awards",
         "cogs.streaks",
     ]
     for cog in COGS_LIST:

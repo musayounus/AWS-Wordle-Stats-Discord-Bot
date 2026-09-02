@@ -41,11 +41,20 @@ MONTHLY_MIN_GAMES = int(os.getenv("MONTHLY_MIN_GAMES", 23))
 # 3x the monthly floor, i.e. roughly 75% attendance over a ~92-day quarter.
 QUARTERLY_MIN_GAMES = int(os.getenv("QUARTERLY_MIN_GAMES", 69))
 
-# First quarter ever scored. Earlier quarters are never announced even though
-# their data exists, so tracking starts cleanly at Q4 2026 (Oct 1 - Dec 31),
-# announced on 1 January 2027. Env-overridable.
+# First quarter ever scored. Q3 2026 (Jul-Sep) is fully covered by era data, so
+# it is the first, announced on 1 October 2026. Q2 2026 and earlier are skipped
+# because the era began partway through Q2. Every quarter runs from then on.
 QUARTERLY_FIRST_YEAR = int(os.getenv("QUARTERLY_FIRST_YEAR", 2026))
-QUARTERLY_FIRST_QUARTER = int(os.getenv("QUARTERLY_FIRST_QUARTER", 4))
+QUARTERLY_FIRST_QUARTER = int(os.getenv("QUARTERLY_FIRST_QUARTER", 3))
+
+# The same four awards over a calendar year, announced on 1 January. 2026 is
+# first, covering the era window (1 May - 31 Dec) rather than the full year.
+YEARLY_FIRST_YEAR = int(os.getenv("YEARLY_FIRST_YEAR", 2026))
+
+# Yearly games floor, as a fraction of the days actually available in the
+# window. Year windows vary — 2026 is 245 era days, later years are full — so a
+# fixed count cannot serve both. 0.75 matches the monthly and quarterly spirit.
+YEARLY_ATTENDANCE_FRACTION = float(os.getenv("YEARLY_ATTENDANCE_FRACTION", 0.75))
 
 # "Solve of the quarter" compares a score against everyone else who played that
 # day. Days with fewer than this many *other* players are ignored, so a thin day

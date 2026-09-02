@@ -1,9 +1,9 @@
-"""Quarterly award calculations.
+"""Period award calculations, shared by the quarterly and yearly awards.
 
-Four awards are computed for a completed quarter and announced on the first
+Four awards are computed over a completed period and announced on the first
 summary of the next one:
 
-  average      — best (lowest) average, subject to QUARTERLY_MIN_GAMES
+  average      — best (lowest) average, subject to a games floor
   uncontended  — most solo first places
   solve        — most impressive single day, relative to everyone else that day
   champion     — weighted composite across all of the above plus participation
@@ -12,6 +12,9 @@ Every query is scoped to the current era, excludes banned users, and honours
 voided wordles, matching the rest of the leaderboards.
 """
 import datetime
+import math
+
+import discord
 
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL
@@ -19,6 +22,16 @@ from utils.leaderboard import FAIL_PENALTY
 
 CATEGORIES = ("average", "uncontended", "solve", "champion")
 
+# Announcement order, with the label for each period type.
+_FIELDS = (
+    ("champion", "🏆", "Champion", "Champion"),
+    ("average", "📊", "Best Average", "Best Average"),
+    ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns"),
+    ("solve", "🧠", "Solve of the Quarter", "Solve of the Year"),
+)
+
+
+# ── period arithmetic ─────────────────────────────────────────────────────────
 
 def quarter_of(d: datetime.date) -> int:
     return (d.month - 1) // 3 + 1
@@ -32,23 +45,36 @@ def quarter_bounds(year: int, quarter: int):
     return start, end
 
 
+def year_bounds(year: int):
+    """Return (start, end) dates for a calendar year; end is exclusive."""
+    return datetime.date(year, 1, 1), datetime.date(year + 1, 1, 1)
+
+
 def previous_quarter(d: datetime.date):
     """The (year, quarter) immediately before the one containing `d`."""
     q = quarter_of(d)
     return (d.year - 1, 4) if q == 1 else (d.year, q - 1)
 
 
+def previous_year(d: datetime.date) -> int:
+    return d.year - 1
+
+
 def quarter_eligible(year: int, quarter: int) -> bool:
     """Awards start at QUARTERLY_FIRST_* and run every quarter after.
 
-    Earlier quarters are never announced, even where the data exists: tracking
-    begins at Q4 2026, so nothing fires on 1 October 2026 — that day only starts
-    the first tracked quarter, which is announced on 1 January 2027.
+    No upper bound, so all four quarters fire every year from then on. Each is
+    announced on the first day of the following quarter, which puts a Q4
+    announcement in the next calendar year.
     """
     return (year, quarter) >= (
         config.QUARTERLY_FIRST_YEAR,
         config.QUARTERLY_FIRST_QUARTER,
     )
+
+
+def year_eligible(year: int) -> bool:
+    return year >= config.YEARLY_FIRST_YEAR
 
 
 def _scope(alias="s"):
@@ -59,8 +85,8 @@ def _scope(alias="s"):
     )
 
 
-async def best_average(conn, start, end):
-    """Lowest average over the quarter, subject to the games floor."""
+async def best_average(conn, start, end, min_games):
+    """Lowest average over the period, subject to the games floor."""
     return await conn.fetchrow(
         f"""
         SELECT s.user_id, MAX(s.username) AS username,
@@ -69,7 +95,7 @@ async def best_average(conn, start, end):
         FROM scores s
         WHERE {_scope()} AND s.date >= $1 AND s.date < $2
         GROUP BY s.user_id
-        HAVING COUNT(*) >= {int(config.QUARTERLY_MIN_GAMES)}
+        HAVING COUNT(*) >= {int(min_games)}
         ORDER BY metric ASC, games_played DESC, s.user_id ASC
         LIMIT 1
         """,
@@ -122,7 +148,7 @@ def _solve_cte():
     return _SOLVE_CTE.format(scope=_scope(), min_others=int(config.SOLVE_MIN_OTHERS))
 
 
-async def solve_of_quarter(conn, start, end):
+async def best_solve(conn, start, end):
     """The single most impressive day, measured against that day's field."""
     return await conn.fetchrow(
         _solve_cte() + """
@@ -146,7 +172,7 @@ def _normalise(value, low, high, invert=False):
     return 100.0 - scaled if invert else scaled
 
 
-async def champion(conn, start, end):
+async def champion(conn, start, end, min_games):
     """Weighted composite across average, crowns, uncontended, solve, games."""
     base = await conn.fetch(
         f"""
@@ -155,7 +181,7 @@ async def champion(conn, start, end):
         FROM scores s
         WHERE {_scope()} AND s.date >= $1 AND s.date < $2
         GROUP BY s.user_id
-        HAVING COUNT(*) >= {int(config.QUARTERLY_MIN_GAMES)}
+        HAVING COUNT(*) >= {int(min_games)}
         """,
         start, end,
     )
@@ -224,13 +250,34 @@ async def champion(conn, start, end):
     return field[0]
 
 
-async def compute_awards(conn, year, quarter):
-    """Return {category: record} for the quarter; categories with no winner are
+async def available_days(conn, start, end):
+    """Distinct wordle days with scores in the window, era-scoped.
+
+    Used to size the yearly floor: year windows vary (2026 is era-scoped to
+    1 May-31 Dec, later years are full) so a fixed number cannot serve both.
+    Deriving from real days also absorbs any day the group missed.
+    """
+    return await conn.fetchval(
+        f"""
+        SELECT COUNT(DISTINCT s.wordle_number) FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        """,
+        start, end,
+    ) or 0
+
+
+async def yearly_min_games(conn, start, end):
+    """Games floor for a year: YEARLY_ATTENDANCE_FRACTION of the days available."""
+    return math.ceil(await available_days(conn, start, end)
+                     * float(config.YEARLY_ATTENDANCE_FRACTION))
+
+
+async def compute_awards(conn, start, end, min_games):
+    """Return {category: record} for the window; categories with no winner are
     omitted so the caller can simply skip announcing them."""
-    start, end = quarter_bounds(year, quarter)
     awards = {}
 
-    avg = await best_average(conn, start, end)
+    avg = await best_average(conn, start, end, min_games)
     if avg is not None:
         awards["average"] = {
             "user_id": avg["user_id"], "username": avg["username"],
@@ -246,7 +293,7 @@ async def compute_awards(conn, year, quarter):
             "detail": f"{unc['metric']} uncontended crowns",
         }
 
-    sol = await solve_of_quarter(conn, start, end)
+    sol = await best_solve(conn, start, end)
     if sol is not None:
         shown = sol["attempts"] if sol["attempts"] is not None else "X"
         awards["solve"] = {
@@ -258,7 +305,7 @@ async def compute_awards(conn, year, quarter):
             ),
         }
 
-    ch = await champion(conn, start, end)
+    ch = await champion(conn, start, end, min_games)
     if ch is not None:
         awards["champion"] = {
             "user_id": ch["user_id"], "username": ch["username"],
@@ -273,51 +320,54 @@ async def compute_awards(conn, year, quarter):
     return awards
 
 
-async def record_awards(conn, year, quarter, awards):
-    """Persist awards. Idempotent: re-running never duplicates or overwrites."""
+async def record_awards(conn, period_type, year, period, awards):
+    """Persist awards. Idempotent: re-running never duplicates or overwrites.
+
+    `period` is the quarter number, or 0 for a whole year.
+    """
     for category, a in awards.items():
         await conn.execute(
             """
-            INSERT INTO quarterly_winners
-                (year, quarter, category, user_id, username, metric, detail, games_played)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (year, quarter, category) DO NOTHING
+            INSERT INTO period_awards
+                (period_type, year, period, category, user_id, username,
+                 metric, detail, games_played)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (period_type, year, period, category) DO NOTHING
             """,
-            year, quarter, category, a["user_id"], a["username"],
+            period_type, year, period, category, a["user_id"], a["username"],
             a["metric"], a["detail"], a["games_played"],
         )
 
 
-def announcements(year, quarter, awards):
-    """Four message strings, in announcement order. Skips missing categories."""
-    tag = f"Q{quarter} {year}"
-    out = []
-    if "average" in awards:
-        a = awards["average"]
-        out.append(
-            f"📊 **Best Average — {tag}**\n"
-            f"Congratulations to <@{a['user_id']}> with an average of "
-            f"**{a['metric']}** over {a['games_played']} games! 🎉"
-        )
-    if "uncontended" in awards:
-        a = awards["uncontended"]
-        out.append(
-            f"🥇 **Most Uncontended Crowns — {tag}**\n"
-            f"Congratulations to <@{a['user_id']}> with **{a['metric']}** solo "
-            f"first-place finishes! 🎉"
-        )
-    if "solve" in awards:
-        a = awards["solve"]
-        out.append(
-            f"🧠 **Solve of the Quarter — {tag}**\n"
-            f"<@{a['user_id']}> — {a['detail']}. That's **{a['metric']}** better "
-            f"than the field. 🎉"
-        )
-    if "champion" in awards:
-        a = awards["champion"]
-        out.append(
-            f"🏆 **Champion of {tag}** 🏆\n"
-            f"<@{a['user_id']}> takes it overall with **{a['metric']}/100**.\n"
-            f"{a['detail'].split('—', 1)[1].strip()}"
-        )
-    return out
+def period_label(period_type, year, period):
+    return f"Q{period} {year}" if period_type == "quarter" else str(year)
+
+
+def award_embed(period_type, year, period, awards):
+    """One embed carrying all four awards. Returns None if nothing qualified."""
+    if not awards:
+        return None
+    label = period_label(period_type, year, period)
+    embed = discord.Embed(
+        title=f"🏆 {label} Awards 🏆",
+        description=f"Congratulations to the winners of {label}!",
+        color=0xF1C40F,
+    )
+    for category, emoji, quarter_name, year_name in _FIELDS:
+        a = awards.get(category)
+        if a is None:
+            continue
+        name = quarter_name if period_type == "quarter" else year_name
+        if category == "champion":
+            value = (f"<@{a['user_id']}> — **{a['metric']}/100**\n"
+                     f"{a['detail'].split('—', 1)[1].strip()}")
+        elif category == "average":
+            value = (f"<@{a['user_id']}> — **{a['metric']}** "
+                     f"over {a['games_played']} games")
+        elif category == "uncontended":
+            value = f"<@{a['user_id']}> — **{a['metric']}** solo first places"
+        else:
+            value = (f"<@{a['user_id']}> — {a['detail']}\n"
+                     f"**{a['metric']}** better than the field")
+        embed.add_field(name=f"{emoji} {name}", value=value, inline=False)
+    return embed
