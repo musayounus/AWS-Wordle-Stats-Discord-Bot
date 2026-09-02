@@ -384,7 +384,7 @@ async def parse_summary_message(bot, message):
         )
 
         # First summary of a new calendar month (KSA-local) → post previous
-        # month's leaderboard with min_games=10 and crown the winner.
+        # month's leaderboard with the MONTHLY_MIN_GAMES floor and crown the winner.
         posted_this_month = await conn.fetchval(
             """
             SELECT 1 FROM summary_log
@@ -422,7 +422,7 @@ async def parse_summary_message(bot, message):
                       AND EXTRACT(YEAR FROM s.date) = $1
                       AND EXTRACT(MONTH FROM s.date) = $2
                     GROUP BY s.user_id
-                    HAVING COUNT(*) >= 10
+                    HAVING COUNT(*) >= {int(config.MONTHLY_MIN_GAMES)}
                     ORDER BY avg_attempts ASC, games_played DESC
                     LIMIT 1
                     """,
@@ -459,7 +459,8 @@ async def parse_summary_message(bot, message):
     if not posted_this_month and prev_winner is not None:
         month_name = datetime.date(prev_year, prev_month_num, 1).strftime("%B %Y")
         monthly_embed = await generate_leaderboard_embed(
-            bot, year=prev_year, month=prev_month_num, min_games=10,
+            bot, year=prev_year, month=prev_month_num,
+            min_games=config.MONTHLY_MIN_GAMES,
         )
         await message.channel.send(embed=monthly_embed)
         await message.channel.send(

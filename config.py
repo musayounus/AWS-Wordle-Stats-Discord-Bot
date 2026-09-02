@@ -31,6 +31,11 @@ WORDLE_TZ = os.getenv("WORDLE_TZ", "Asia/Riyadh")
 # legacy reachable via era=legacy param. Env-overridable for future cutovers.
 CURRENT_ERA_START_WORDLE = int(os.getenv("CURRENT_ERA_START_WORDLE", 1777))
 
+# Minimum games played in a calendar month to qualify for the monthly crown.
+# Applies both to the winner query and the monthly recap leaderboard, so the
+# crowned user is always the top row of the board posted beside it.
+MONTHLY_MIN_GAMES = int(os.getenv("MONTHLY_MIN_GAMES", 23))
+
 # ── AWS / RDS settings ────────────────────────────────────────────────────────
 AWS_REGION       = os.getenv("AWS_REGION", "eu-central-1")
 RDS_SECRET_ARN   = os.getenv("RDS_SECRET_ARN")
