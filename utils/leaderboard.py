@@ -97,16 +97,18 @@ async def generate_leaderboard_embed(
             avg_score = f"{row['avg_attempts']:.2f}" if row['avg_attempts'] is not None else "—"
             best_score = row['best_score'] or "—"
 
+            # Trailing, so the arrow always sits at the end of the line
+            # regardless of how long the name is.
             arrow = ""
             if deltas:
                 d = deltas.get(row["user_id"], 0)
                 if d > 0:
-                    arrow = f"⬆️ {d} " if d > 1 else "⬆️ "
+                    arrow = f" ⬆️ {d}" if d > 1 else " ⬆️"
                 elif d < 0:
-                    arrow = f"⬇️ {-d} " if d < -1 else "⬇️ "
+                    arrow = f" ⬇️ {-d}" if d < -1 else " ⬇️"
 
             embed.add_field(
-                name=f"#{idx} {arrow}{row['username']}",
+                name=f"#{idx} {row['username']}{arrow}",
                 value=(f"Avg: {avg_score} | Best: {best_score} {emoji_best}\n"
                        f"Games: {row['games_played']} | Fails: {row['fails']} {emoji_fail}"),
                 inline=False
