@@ -20,7 +20,10 @@ import config
 from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.leaderboard import FAIL_PENALTY
 
-CATEGORIES = ("average", "uncontended", "solve", "champion")
+CATEGORIES = (
+    "champion", "average", "uncontended", "solve",
+    "metronome", "improved", "streak", "unbroken", "best_month", "hardest",
+)
 
 # Announcement order, with the label for each period type.
 _FIELDS = (
@@ -28,7 +31,16 @@ _FIELDS = (
     ("average", "📊", "Best Average", "Best Average"),
     ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns"),
     ("solve", "🧠", "Solve of the Quarter", "Solve of the Year"),
+    ("metronome", "🎯", "The Metronome", "The Metronome"),
+    ("improved", "📈", "Most Improved", "Most Improved"),
+    ("streak", "🔥", "Longest Streak", "Longest Streak"),
+    ("unbroken", "🛡️", "Unbroken", "Unbroken"),
+    ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year"),
+    ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year"),
 )
+
+# The hardest-Wordle award describes a day, not a player, so it stores no user.
+GROUP_CATEGORIES = ("hardest",)
 
 
 # ── period arithmetic ─────────────────────────────────────────────────────────
@@ -157,6 +169,173 @@ async def best_solve(conn, start, end):
                ROUND(delta, 2) AS metric
         FROM rated
         ORDER BY delta DESC, attempts ASC NULLS LAST, others DESC, date ASC, user_id ASC
+        LIMIT 1
+        """,
+        start, end,
+    )
+
+
+async def metronome(conn, start, end, min_games):
+    """Lowest spread of scores — never a disaster round.
+
+    Population stddev, not sample, so a player is measured on the games they
+    actually played rather than as a sample of some larger set.
+    """
+    return await conn.fetchrow(
+        f"""
+        SELECT s.user_id, MAX(s.username) AS username,
+               ROUND(STDDEV_POP(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS metric,
+               ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS avg_att,
+               COUNT(*) AS games_played
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id
+        HAVING COUNT(*) >= {int(min_games)}
+        ORDER BY metric ASC, avg_att ASC, games_played DESC, s.user_id ASC
+        LIMIT 1
+        """,
+        start, end,
+    )
+
+
+async def most_improved(conn, start, end, min_games):
+    """Biggest drop in average from the first half of the period to the second.
+
+    Each half needs its own floor, otherwise a player with two games in the
+    first half and a good second half wins on noise.
+    """
+    midpoint = start + datetime.timedelta(days=(end - start).days // 2)
+    half_floor = max(5, int(min_games) // 3)
+    return await conn.fetchrow(
+        f"""
+        SELECT s.user_id, MAX(s.username) AS username,
+               ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))
+                     FILTER (WHERE s.date < $3)::numeric, 2) AS first_half,
+               ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))
+                     FILTER (WHERE s.date >= $3)::numeric, 2) AS second_half,
+               COUNT(*) AS games_played,
+               ROUND((AVG(COALESCE(s.attempts, {FAIL_PENALTY})) FILTER (WHERE s.date < $3)
+                    - AVG(COALESCE(s.attempts, {FAIL_PENALTY})) FILTER (WHERE s.date >= $3)
+                     )::numeric, 2) AS metric
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id
+        HAVING COUNT(*) FILTER (WHERE s.date < $3) >= {half_floor}
+           AND COUNT(*) FILTER (WHERE s.date >= $3) >= {half_floor}
+        ORDER BY metric DESC NULLS LAST, second_half ASC, s.user_id ASC
+        LIMIT 1
+        """,
+        start, end, midpoint,
+    )
+
+
+async def unbroken(conn, start, end):
+    """Played every single day the group played. Often nobody qualifies."""
+    return await conn.fetchrow(
+        f"""
+        WITH days AS (
+            SELECT COUNT(DISTINCT s.wordle_number) AS total FROM scores s
+            WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        )
+        SELECT s.user_id, MAX(s.username) AS username,
+               COUNT(DISTINCT s.wordle_number) AS metric,
+               COUNT(*) AS games_played,
+               (SELECT total FROM days) AS total_days
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id
+        HAVING COUNT(DISTINCT s.wordle_number) = (SELECT total FROM days)
+        ORDER BY s.user_id ASC
+        LIMIT 1
+        """,
+        start, end,
+    )
+
+
+def _longest_run(numbers, voided):
+    """Longest run of consecutive wordles, treating voided days as bridgeable
+    rather than streak-breaking — matching calculate_streak's rule."""
+    nums = sorted(set(numbers))
+    if not nums:
+        return 0
+    best = run = 1
+    for prev, nxt in zip(nums, nums[1:]):
+        if set(range(prev + 1, nxt)) <= voided:
+            run += 1
+        else:
+            run = 1
+        best = max(best, run)
+    return best
+
+
+async def longest_streak(conn, start, end):
+    """Longest unbroken run of days played inside the window."""
+    rows = await conn.fetch(
+        f"""
+        SELECT s.user_id, MAX(s.username) AS username,
+               array_agg(DISTINCT s.wordle_number) AS wordles
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id
+        """,
+        start, end,
+    )
+    if not rows:
+        return None
+    global_voided = {
+        r["wordle_number"]
+        for r in await conn.fetch("SELECT wordle_number FROM voided_wordles")
+    }
+    best = None
+    for r in rows:
+        user_voided = {
+            v["wordle_number"]
+            for v in await conn.fetch(
+                "SELECT wordle_number FROM voided_user_wordles WHERE user_id = $1",
+                r["user_id"],
+            )
+        }
+        run = _longest_run(r["wordles"], global_voided | user_voided)
+        key = (run, -r["user_id"])
+        if best is None or key > best[0]:
+            best = (key, {"user_id": r["user_id"], "username": r["username"],
+                          "metric": run, "games_played": len(r["wordles"])})
+    return best[1] if best else None
+
+
+async def best_month(conn, start, end):
+    """The single best calendar month by average inside the period."""
+    return await conn.fetchrow(
+        f"""
+        SELECT s.user_id, MAX(s.username) AS username,
+               EXTRACT(YEAR FROM s.date)::int AS yr,
+               EXTRACT(MONTH FROM s.date)::int AS mon,
+               ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS metric,
+               COUNT(*) AS games_played
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id, yr, mon
+        HAVING COUNT(*) >= {int(config.MONTHLY_MIN_GAMES)}
+        ORDER BY metric ASC, games_played DESC, s.user_id ASC
+        LIMIT 1
+        """,
+        start, end,
+    )
+
+
+async def hardest_wordle(conn, start, end):
+    """The day the group collectively struggled most. Not a player award."""
+    return await conn.fetchrow(
+        f"""
+        SELECT s.wordle_number, MIN(s.date) AS date,
+               ROUND(AVG(COALESCE(s.attempts, {FAIL_PENALTY}))::numeric, 2) AS metric,
+               COUNT(*) AS players,
+               COUNT(*) FILTER (WHERE s.attempts IS NULL) AS fails
+        FROM scores s
+        WHERE {_scope()} AND s.date >= $1 AND s.date < $2
+        GROUP BY s.wordle_number
+        HAVING COUNT(*) >= {int(config.SOLVE_MIN_OTHERS) + 1}
+        ORDER BY metric DESC, fails DESC, players DESC, s.wordle_number ASC
         LIMIT 1
         """,
         start, end,
@@ -317,6 +496,60 @@ async def compute_awards(conn, start, end, min_games):
             ),
         }
 
+    met = await metronome(conn, start, end, min_games)
+    if met is not None:
+        awards["metronome"] = {
+            "user_id": met["user_id"], "username": met["username"],
+            "metric": met["metric"], "games_played": met["games_played"],
+            "detail": (f"spread of {met['metric']} around a {met['avg_att']} average "
+                       f"over {met['games_played']} games"),
+        }
+
+    imp = await most_improved(conn, start, end, min_games)
+    if imp is not None and imp["metric"] is not None and imp["metric"] > 0:
+        awards["improved"] = {
+            "user_id": imp["user_id"], "username": imp["username"],
+            "metric": imp["metric"], "games_played": imp["games_played"],
+            "detail": (f"{imp['first_half']} → {imp['second_half']}, "
+                       f"an improvement of {imp['metric']}"),
+        }
+
+    st = await longest_streak(conn, start, end)
+    if st is not None:
+        awards["streak"] = {
+            "user_id": st["user_id"], "username": st["username"],
+            "metric": st["metric"], "games_played": st["games_played"],
+            "detail": f"{st['metric']} days in a row",
+        }
+
+    unb = await unbroken(conn, start, end)
+    if unb is not None:
+        awards["unbroken"] = {
+            "user_id": unb["user_id"], "username": unb["username"],
+            "metric": unb["metric"], "games_played": unb["games_played"],
+            "detail": f"played all {unb['total_days']} days — never missed one",
+        }
+
+    bm = await best_month(conn, start, end)
+    if bm is not None:
+        month_name = datetime.date(bm["yr"], bm["mon"], 1).strftime("%B")
+        awards["best_month"] = {
+            "user_id": bm["user_id"], "username": bm["username"],
+            "metric": bm["metric"], "games_played": bm["games_played"],
+            "detail": (f"{bm['metric']} average in {month_name} "
+                       f"over {bm['games_played']} games"),
+        }
+
+    hard = await hardest_wordle(conn, start, end)
+    if hard is not None:
+        awards["hardest"] = {
+            "user_id": None, "username": None,
+            "metric": hard["metric"], "games_played": hard["players"],
+            "detail": (f"Wordle #{hard['wordle_number']} ({hard['date']}) — the group "
+                       f"averaged {hard['metric']} with {hard['fails']} fails "
+                       f"across {hard['players']} players"),
+        }
+
     return awards
 
 
@@ -366,8 +599,17 @@ def award_embed(period_type, year, period, awards):
                      f"over {a['games_played']} games")
         elif category == "uncontended":
             value = f"<@{a['user_id']}> — **{a['metric']}** solo first places"
-        else:
+        elif category == "solve":
             value = (f"<@{a['user_id']}> — {a['detail']}\n"
                      f"**{a['metric']}** better than the field")
+        elif category == "streak":
+            value = f"<@{a['user_id']}> — **{a['metric']}** days in a row"
+        elif category == "unbroken":
+            value = f"<@{a['user_id']}> — {a['detail']}"
+        elif category == "hardest":
+            # No player: this award describes the day itself.
+            value = a["detail"]
+        else:
+            value = f"<@{a['user_id']}> — {a['detail']}"
         embed.add_field(name=f"{emoji} {name}", value=value, inline=False)
     return embed

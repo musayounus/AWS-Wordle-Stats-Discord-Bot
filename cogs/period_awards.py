@@ -10,8 +10,15 @@ LABELS = {
     "average": ("📊", "Best Average"),
     "uncontended": ("🥇", "Most Uncontended"),
     "solve": ("🧠", "Best Solve"),
+    "metronome": ("🎯", "The Metronome"),
+    "improved": ("📈", "Most Improved"),
+    "streak": ("🔥", "Longest Streak"),
+    "unbroken": ("🛡️", "Unbroken"),
+    "best_month": ("📅", "Best Month"),
+    "hardest": ("💀", "Hardest Wordle"),
 }
-ORDER = ("champion", "average", "uncontended", "solve")
+ORDER = ("champion", "average", "uncontended", "solve", "metronome",
+         "improved", "streak", "unbroken", "best_month", "hardest")
 
 
 class PeriodAwardsCog(commands.Cog):
@@ -49,15 +56,23 @@ class PeriodAwardsCog(commands.Cog):
                 if r is None:
                     continue
                 emoji, label = LABELS.get(category, ("•", category.title()))
+                if r["user_id"] is None:
+                    # Group awards (hardest Wordle) describe a day, not a player.
+                    lines.append(f"{emoji} **{label}:** {r['detail']}")
+                    continue
                 member = (
                     interaction.guild.get_member(r["user_id"])
                     if interaction.guild else None
                 )
                 display = member.display_name if member else r["username"]
                 lines.append(f"{emoji} **{label}:** {display} — {r['detail']}")
+            value = "\n".join(lines) or "—"
+            # Discord caps a field value at 1024 characters.
+            if len(value) > 1024:
+                value = value[:1021] + "..."
             embed.add_field(
                 name=period_label(period_type, year, period),
-                value="\n".join(lines) or "—",
+                value=value,
                 inline=False,
             )
         await interaction.followup.send(embed=embed)

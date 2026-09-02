@@ -145,6 +145,12 @@ async def setup_hook():
                 PRIMARY KEY (period_type, year, period, category)
             )
         """)
+        # The hardest-Wordle award describes a day rather than a player, so it
+        # stores no user. Idempotent, and a no-op once already dropped.
+        await conn.execute(
+            "ALTER TABLE period_awards ALTER COLUMN user_id DROP NOT NULL")
+        await conn.execute(
+            "ALTER TABLE period_awards ALTER COLUMN username DROP NOT NULL")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
                 wordle_number INTEGER NOT NULL,
