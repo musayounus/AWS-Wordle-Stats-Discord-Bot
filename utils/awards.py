@@ -10,6 +10,7 @@ summary of the next one:
   metronome    — lowest spread of scores, i.e. never a disaster round
   improved     — biggest drop in average from the first half to the second
   streak       — longest consecutive run of days played
+  aces         — everyone who solved in a single guess (a roll-call, not a winner)
   best_month   — strongest calendar month inside the period
   hardest      — the day the group collectively struggled most (no player)
 
@@ -26,7 +27,7 @@ from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.leaderboard import FAIL_PENALTY
 
 CATEGORIES = (
-    "champion", "average", "uncontended", "solve",
+    "champion", "average", "uncontended", "solve", "aces",
     "metronome", "improved", "streak", "best_month", "hardest",
 )
 
@@ -36,16 +37,13 @@ _FIELDS = (
     ("average", "📊", "Best Average", "Best Average"),
     ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns"),
     ("solve", "🧠", "Solve of the Quarter", "Solve of the Year"),
+    ("aces", "⭐", "1/6 Solves", "1/6 Solves"),
     ("metronome", "🎯", "The Metronome", "The Metronome"),
     ("improved", "📈", "Most Improved", "Most Improved"),
     ("streak", "🔥", "Longest Streak", "Longest Streak"),
     ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year"),
     ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year"),
 )
-
-# The hardest-Wordle award describes a day, not a player, so it stores no user.
-GROUP_CATEGORIES = ("hardest",)
-
 
 # ── period arithmetic ─────────────────────────────────────────────────────────
 
@@ -174,6 +172,25 @@ async def best_solve(conn, start, end):
         FROM rated
         ORDER BY delta DESC, attempts ASC NULLS LAST, others DESC, date ASC, user_id ASC
         LIMIT 1
+        """,
+        start, end,
+    )
+
+
+async def ace_solves(conn, start, end):
+    """Everyone who solved in a single guess. A roll-call, not a contest.
+
+    1/6 is the rarest result in the game — two in the whole era so far — and
+    they are usually by different players, so crowning one winner would bury
+    the others.
+    """
+    return await conn.fetch(
+        f"""
+        SELECT s.user_id, MAX(s.username) AS username, COUNT(*) AS n
+        FROM scores s
+        WHERE {_scope()} AND s.attempts = 1 AND s.date >= $1 AND s.date < $2
+        GROUP BY s.user_id
+        ORDER BY n DESC, MAX(s.username) ASC
         """,
         start, end,
     )
@@ -478,6 +495,18 @@ async def compute_awards(conn, start, end, min_games):
             ),
         }
 
+    aces = await ace_solves(conn, start, end)
+    if aces:
+        roll_call = ", ".join(
+            f"<@{r['user_id']}>" + (f" ×{r['n']}" if r["n"] > 1 else "")
+            for r in aces
+        )
+        awards["aces"] = {
+            "user_id": None, "username": None,
+            "metric": sum(r["n"] for r in aces), "games_played": len(aces),
+            "detail": roll_call,
+        }
+
     met = await metronome(conn, start, end, min_games)
     if met is not None:
         awards["metronome"] = {
@@ -580,6 +609,12 @@ def award_embed(period_type, year, period, awards):
             where, _, versus = a["detail"].partition(" — ")
             value = (f"<@{a['user_id']}> — {where}\n"
                      f"{versus[:1].upper()}{versus[1:]} — **{a['metric']}** better.")
+        elif category == "aces":
+            noun = "quarter" if period_type == "quarter" else "year"
+            tail = (f"the only one all {noun}. Take a bow. 🎉"
+                    if a["metric"] == 1
+                    else f"**{a['metric']}** times this {noun}. Take a bow. 🎉")
+            value = f"{a['detail']}\nSolved in a single guess — {tail}"
         elif category == "metronome":
             value = (f"<@{a['user_id']}> — the most consistent scorer in the group.\n"
                      f"Results typically land within **{a['metric']}** of their own "

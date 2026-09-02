@@ -10,13 +10,14 @@ LABELS = {
     "average": ("📊", "Best Average"),
     "uncontended": ("🥇", "Most Uncontended"),
     "solve": ("🧠", "Best Solve"),
+    "aces": ("⭐", "1/6 Solves"),
     "metronome": ("🎯", "The Metronome"),
     "improved": ("📈", "Most Improved"),
     "streak": ("🔥", "Longest Streak"),
     "best_month": ("📅", "Best Month"),
     "hardest": ("💀", "Hardest Wordle"),
 }
-ORDER = ("champion", "average", "uncontended", "solve", "metronome",
+ORDER = ("champion", "average", "uncontended", "solve", "aces", "metronome",
          "improved", "streak", "best_month", "hardest")
 
 
