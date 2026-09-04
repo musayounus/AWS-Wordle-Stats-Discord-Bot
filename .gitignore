@@ -9,3 +9,5 @@ wordle-bot_backup_*
 Thumbs.db
 .claude/
 CLAUDE.md
+.agents/
+skills-lock.json
