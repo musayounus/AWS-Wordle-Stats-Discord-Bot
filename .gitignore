@@ -7,7 +7,3 @@ __pycache__/
 wordle-bot_backup_*
 .DS_Store
 Thumbs.db
-.claude/
-CLAUDE.md
-.agents/
-skills-lock.json
