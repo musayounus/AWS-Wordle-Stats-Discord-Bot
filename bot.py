@@ -1,6 +1,7 @@
 import os
 import sys
 import io
+import pkgutil
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -167,20 +168,10 @@ async def setup_hook():
             "ON leaderboard_snapshots (wordle_number DESC)"
         )
 
-    # 2) Load all cogs
-    COGS_LIST = [
-        "cogs.admin",
-        "cogs.leaderboard",
-        "cogs.help",
-        "cogs.events",
-        "cogs.crowns",
-        "cogs.uncontended_crowns",
-        "cogs.banned_users",
-        "cogs.fails",
-        "cogs.monthly_winners",
-        "cogs.period_awards",
-        "cogs.streaks",
-    ]
+    # 2) Load all cogs. Discovered rather than listed, so a new cogs/*.py is
+    # picked up without also having to register it here. Cogs are independent,
+    # so alphabetical load order is fine.
+    COGS_LIST = [f"cogs.{m.name}" for m in pkgutil.iter_modules(["cogs"])]
     for cog in COGS_LIST:
         try:
             await bot.load_extension(cog)

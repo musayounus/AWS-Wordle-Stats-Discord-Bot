@@ -132,3 +132,69 @@ async def generate_leaderboard_embed(
             )
 
     return embed
+
+async def generate_count_board_embed(
+    bot, table, title, value_label, colour, empty_message,
+    window, era="current", min_games=None,
+):
+    """Embed for the boards that just count rows per user.
+
+    Crowns, uncontended crowns and fails are the same query: count rows in
+    `table` per user over a window, filtered by era, optionally requiring a
+    minimum number of games in `scores` over that same window.
+
+    `window` is the dict from range_filters.window_kwargs(). Every table is
+    aliased `s`, so all three share one date column.
+    """
+    alias = "s"
+    date_filter, title_suffix = build_window_filter(**window, column=f"{alias}.date")
+    scores_date_filter, _ = build_window_filter(**window, column="sc.date")
+    era_filter, era_suffix = build_era_filter(era, column=f"{alias}.wordle_number")
+    scores_era_filter, _ = build_era_filter(era, column="sc.wordle_number")
+
+    min_games_clause = ""
+    if min_games:
+        min_games_clause = f"""
+            HAVING (
+                SELECT COUNT(*) FROM scores sc
+                WHERE sc.user_id = {alias}.user_id
+                  AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
+                  AND {NOT_VOIDED_SQL.format(alias='sc')}
+                  {scores_date_filter} {scores_era_filter}
+            ) >= {int(min_games)}
+        """
+
+    async with bot.pg_pool.acquire() as conn:
+        rows = await conn.fetch(f"""
+            SELECT
+                {alias}.user_id,
+                MAX({alias}.username) AS display_name,
+                COUNT(*) AS total
+            FROM {table} {alias}
+            WHERE {alias}.user_id NOT IN (SELECT user_id FROM banned_users)
+              AND {NOT_VOIDED_SQL.format(alias=alias)}
+              {date_filter} {era_filter}
+            GROUP BY {alias}.user_id
+            {min_games_clause}
+            ORDER BY total DESC, {alias}.user_id ASC
+            LIMIT 15
+        """)
+
+    if not rows:
+        return None, empty_message
+
+    if title_suffix:
+        title += f" ({title_suffix})"
+    if era_suffix:
+        title += f" — {era_suffix}"
+    if min_games:
+        title += f" — ≥{int(min_games)} games"
+
+    embed = discord.Embed(title=title, color=colour)
+    for idx, row in enumerate(rows, start=1):
+        embed.add_field(
+            name=f"#{idx} {row['display_name']}",
+            value=f"{row['total']} {value_label}",
+            inline=False,
+        )
+    return embed, None

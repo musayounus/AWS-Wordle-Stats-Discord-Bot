@@ -2,10 +2,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.admin_helpers import NOT_VOIDED_SQL, validate_wordle_number, wordle_date_for_number
+from utils.admin_helpers import reject_bad_wordle, wordle_date_for_number
+from utils.leaderboard import generate_count_board_embed
 from utils.range_filters import (
-    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES,
-    build_era_filter, build_window_filter, window_kwargs,
+    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES, window_kwargs,
 )
 
 
@@ -42,57 +42,21 @@ class FailsCog(commands.Cog):
         era: app_commands.Choice[str] = None,
     ):
         await interaction.response.defer(thinking=True)
-        era_value = era.value if era else "current"
-        window = window_kwargs(season, year, month, quarter)
-        date_filter, title_suffix = build_window_filter(**window, column="f.date")
-        scores_date_filter, _ = build_window_filter(**window, column="sc.date")
-        era_filter, era_suffix = build_era_filter(era_value, column="f.wordle_number")
-        scores_era_filter, _ = build_era_filter(era_value, column="sc.wordle_number")
-        min_games_clause = ""
-        if min_games:
-            min_games_clause = f"""
-                HAVING (
-                    SELECT COUNT(*) FROM scores sc
-                    WHERE sc.user_id = f.user_id
-                      AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
-                      AND {NOT_VOIDED_SQL.format(alias='sc')}
-                      {scores_date_filter} {scores_era_filter}
-                ) >= {int(min_games)}
-            """
-        async with self.bot.pg_pool.acquire() as conn:
-            rows = await conn.fetch(f"""
-                SELECT
-                    f.user_id,
-                    MAX(f.username) AS display_name,
-                    COUNT(*) AS fail_count
-                FROM fails f
-                WHERE f.user_id NOT IN (SELECT user_id FROM banned_users)
-                  AND {NOT_VOIDED_SQL.format(alias='f')}
-                  {date_filter} {era_filter}
-                GROUP BY f.user_id
-                {min_games_clause}
-                ORDER BY fail_count DESC
-                LIMIT 15
-            """)
-        if not rows:
-            await interaction.followup.send("💀 No fails for this range.")
-            return
-
-        title = "💀 Wordle Fails Leaderboard"
-        if title_suffix:
-            title += f" ({title_suffix})"
-        if era_suffix:
-            title += f" — {era_suffix}"
-        if min_games:
-            title += f" — ≥{int(min_games)} games"
-        embed = discord.Embed(title=title, color=0xff0000)
-        for idx, r in enumerate(rows, start=1):
-            embed.add_field(
-                name=f"#{idx} {r['display_name']}",
-                value=f"{r['fail_count']} Fails 💀",
-                inline=False
-            )
-        await interaction.followup.send(embed=embed)
+        embed, empty = await generate_count_board_embed(
+            self.bot,
+            table="fails",
+            title="💀 Wordle Fails Leaderboard",
+            value_label="Fails 💀",
+            colour=0xff0000,
+            empty_message="💀 No fails for this range.",
+            window=window_kwargs(season, year, month, quarter),
+            era=era.value if era else "current",
+            min_games=min_games,
+        )
+        if empty:
+            await interaction.followup.send(empty)
+        else:
+            await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="add_fails", description="(Admin-Only) Add a fail (X/6) for a user on a specific Wordle")
     @app_commands.describe(user="User to adjust", wordle_number="Wordle number")
@@ -104,9 +68,7 @@ class FailsCog(commands.Cog):
         user: discord.User,
         wordle_number: int,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         date = wordle_date_for_number(wordle_number)
@@ -145,9 +107,7 @@ class FailsCog(commands.Cog):
         user: discord.User,
         wordle_number: int,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         async with self.bot.pg_pool.acquire() as conn:

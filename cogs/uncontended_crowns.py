@@ -1,10 +1,10 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from utils.admin_helpers import NOT_VOIDED_SQL
+
+from utils.leaderboard import generate_count_board_embed
 from utils.range_filters import (
-    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES,
-    build_era_filter, build_window_filter, window_kwargs,
+    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES, window_kwargs,
 )
 
 class UncontendedCrownsCog(commands.Cog):
@@ -37,58 +37,20 @@ class UncontendedCrownsCog(commands.Cog):
         era: app_commands.Choice[str] = None,
     ):
         await interaction.response.defer(thinking=True)
-        era_value = era.value if era else "current"
-        window = window_kwargs(season, year, month, quarter)
-        date_filter, title_suffix = build_window_filter(**window)
-        scores_date_filter, _ = build_window_filter(**window, column="sc.date")
-        era_filter, era_suffix = build_era_filter(era_value, column="s.wordle_number")
-        scores_era_filter, _ = build_era_filter(era_value, column="sc.wordle_number")
-        min_games_clause = ""
-        if min_games:
-            min_games_clause = f"""
-                HAVING (
-                    SELECT COUNT(*) FROM scores sc
-                    WHERE sc.user_id = s.user_id
-                      AND sc.user_id NOT IN (SELECT user_id FROM banned_users)
-                      AND {NOT_VOIDED_SQL.format(alias='sc')}
-                      {scores_date_filter} {scores_era_filter}
-                ) >= {int(min_games)}
-            """
-        async with self.bot.pg_pool.acquire() as conn:
-            rows = await conn.fetch(f"""
-                SELECT s.user_id, MAX(s.username) AS username, COUNT(*) AS count
-                FROM uncontended_crowns s
-                WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
-                  AND {NOT_VOIDED_SQL.format(alias='s')}
-                  {date_filter} {era_filter}
-                GROUP BY s.user_id
-                {min_games_clause}
-                ORDER BY count DESC
-                LIMIT 15
-            """)
-
-            if not rows:
-                await interaction.followup.send("🥇 No uncontended data for this range.")
-                return
-
-            leaderboard = ""
-            for i, row in enumerate(rows, 1):
-                user = interaction.guild.get_member(row["user_id"])
-                name = user.display_name if user else row["username"] or f"User ID {row['user_id']}"
-                leaderboard += f"**{i}.** 🥇 {name} — `{row['count']}`\n"
-
-            title = "🥇 Uncontended Leaderboard 🥇"
-            if title_suffix:
-                title += f" ({title_suffix})"
-            if era_suffix:
-                title += f" — {era_suffix}"
-            if min_games:
-                title += f" — ≥{int(min_games)} games"
-            embed = discord.Embed(
-                title=title,
-                description=leaderboard,
-                color=discord.Color.gold()
-            )
+        embed, empty = await generate_count_board_embed(
+            self.bot,
+            table="uncontended_crowns",
+            title="🥇 Uncontended Leaderboard 🥇",
+            value_label="Uncontended 🥇",
+            colour=discord.Color.gold(),
+            empty_message="🥇 No uncontended data for this range.",
+            window=window_kwargs(season, year, month, quarter),
+            era=era.value if era else "current",
+            min_games=min_games,
+        )
+        if empty:
+            await interaction.followup.send(empty)
+        else:
             await interaction.followup.send(embed=embed)
 
 async def setup(bot):

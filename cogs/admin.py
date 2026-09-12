@@ -12,6 +12,7 @@ from utils.user_resolver import (
     resolve_user,
 )
 from utils.admin_helpers import (
+    reject_bad_wordle,
     sync_uncontended_for_wordle,
     validate_wordle_number,
     wordle_date_for_number,
@@ -148,9 +149,7 @@ class AdminCog(commands.Cog):
         attempts: app_commands.Choice[str],
         crown: bool = False,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         date = wordle_date_for_number(wordle_number)
@@ -224,9 +223,7 @@ class AdminCog(commands.Cog):
         user: discord.User,
         wordle_number: int,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         async with self.bot.pg_pool.acquire() as conn:
@@ -487,9 +484,7 @@ class AdminCog(commands.Cog):
         wordle_number: int,
         attempts: Optional[app_commands.Choice[str]] = None,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         date = wordle_date_for_number(wordle_number)
@@ -563,9 +558,7 @@ class AdminCog(commands.Cog):
         user: discord.User,
         wordle_number: int,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
 
         async with self.bot.pg_pool.acquire() as conn:
@@ -600,9 +593,7 @@ class AdminCog(commands.Cog):
         wordle_number: int,
         reason: Optional[str] = None,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
         async with self.bot.pg_pool.acquire() as conn:
             await conn.execute(
@@ -674,9 +665,7 @@ class AdminCog(commands.Cog):
         wordle_number: int,
         reason: Optional[str] = None,
     ):
-        err = validate_wordle_number(wordle_number)
-        if err:
-            await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        if await reject_bad_wordle(interaction, wordle_number):
             return
         async with self.bot.pg_pool.acquire() as conn:
             await conn.execute(

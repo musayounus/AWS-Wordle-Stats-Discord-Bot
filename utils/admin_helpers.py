@@ -44,6 +44,20 @@ def current_wordle_number(today: Optional[datetime.date] = None) -> int:
     return (today - WORDLE_START).days
 
 
+async def reject_bad_wordle(interaction, wordle_number: int) -> bool:
+    """Validate a wordle number, replying and returning True if it is bad.
+
+    Usage, at the top of any admin command taking a wordle number:
+        if await reject_bad_wordle(interaction, wordle_number):
+            return
+    """
+    err = validate_wordle_number(wordle_number)
+    if err:
+        await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+        return True
+    return False
+
+
 def wordle_date_for_number(wordle_number: int) -> datetime.date:
     return WORDLE_START + datetime.timedelta(days=wordle_number)
 
