@@ -20,7 +20,7 @@ class CrownsCog(commands.Cog):
         min_games="Only include users with at least this many games in the window",
         era="current (Wordle #1777+, default) or legacy (pre-#1777)",
         season="current season (default) or all for the full era",
-        quarter="Specific quarter to show (uses current year if year is omitted)",
+        quarter="Specific quarter to show (uses current year if year is omitted; overrides month)",
     )
     @app_commands.choices(
         month=MONTH_CHOICES, era=ERA_CHOICES,
@@ -47,6 +47,7 @@ class CrownsCog(commands.Cog):
             window=window_kwargs(season, year, month, quarter),
             era=era.value if era else "current",
             min_games=min_games,
+            guild=interaction.guild,
         )
         if empty:
             await interaction.followup.send(empty)

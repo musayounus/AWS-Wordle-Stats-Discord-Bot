@@ -48,13 +48,22 @@ def season_of_wordle(wordle_number: int):
     return d.year, quarter_of(d)
 
 
-def same_season(a: int, b: int) -> bool:
-    """True when two wordle numbers fall in the same quarter.
+def snapshot_comparable(prior_wordle: int, today: datetime.date = None) -> bool:
+    """True when a prior snapshot was ranked over the window in use right now.
 
-    Used to decide whether a prior leaderboard snapshot is comparable: one from
-    an earlier season ranked a different set of games entirely.
+    The snapshot query uses build_window_filter() with no arguments, i.e. the
+    season containing *today*. It must therefore be compared against today's
+    season, not against the summary's wordle number: a daily summary reports
+    yesterday's results, so on the first day of a season the summary's wordle
+    still belongs to the previous one and comparing the two would wrongly pass.
+
+    Before the cutover there is no season window, so every snapshot is
+    comparable and the arrows behave as they always did.
     """
-    return season_of_wordle(a) == season_of_wordle(b)
+    season = current_season(today)
+    if season is None:
+        return True
+    return season_of_wordle(prior_wordle) == season
 
 
 def current_season(today: datetime.date = None):
@@ -107,17 +116,26 @@ def build_date_filter(year=None, month=None, column="s.date"):
 
 
 def build_window_filter(season="current", year=None, month=None, quarter=None,
-                        column="s.date", today=None):
+                        column="s.date", today=None, era="current"):
     """Return (sql_fragment, title_suffix) for the time window of a board.
 
     Most explicit wins:
       quarter            → that quarter (year defaults to the current year)
       year and/or month  → that calendar range, season ignored
       season="all"       → the whole era
+      era="legacy"       → no season window; see below
       otherwise          → the season in progress, or nothing before cutover
 
     The year/month rule is load-bearing: the monthly recap passes both, so it
     must get a whole month, not a month intersected with the current quarter.
+    `month` is ignored when `quarter` is given — quarter is the coarser window
+    and wins outright.
+
+    The era rule is equally load-bearing. Legacy means wordle_number below
+    CURRENT_ERA_START_WORDLE, i.e. #1777 = 2026-05-01 and earlier, while the
+    first season is Q4 2026. Those predicates are disjoint, so applying the
+    season default to a legacy request returns nothing at all. An explicit
+    year/month/quarter still works with era=legacy.
     """
     if quarter is not None:
         y = int(year) if year is not None else (today or wordle_today()).year
@@ -126,6 +144,8 @@ def build_window_filter(season="current", year=None, month=None, quarter=None,
         return build_date_filter(year=year, month=month, column=column)
     elif season == "all":
         return "", "All Time"
+    elif era != "current":
+        return "", None
     else:
         current = current_season(today)
         if current is None:

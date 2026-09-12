@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.leaderboard import FAIL_PENALTY
-from utils.range_filters import build_era_filter, build_window_filter, same_season
+from utils.range_filters import build_era_filter, build_window_filter, snapshot_comparable
 from utils import awards as awards_mod
 from utils.user_resolver import (
     build_cache_from_mentions,
@@ -377,9 +377,11 @@ async def parse_summary_message(bot, message):
 
         # A snapshot from an earlier season ranked a different set of games, so
         # diffing against it would show every player swinging wildly on the first
-        # day of a season. Drop the arrows for that one post instead.
+        # day of a season. Drop the arrows for that one post instead. Compared
+        # against today's season, which is what current_ranks above queried -
+        # not against wordle_number, which is yesterday's summary.
         deltas = {}
-        if prior and same_season(prior[0]["wordle_number"], wordle_number):
+        if prior and snapshot_comparable(prior[0]["wordle_number"]):
             for r in current_ranks:
                 yr = prior_by_user.get(r["user_id"])
                 if yr is None:

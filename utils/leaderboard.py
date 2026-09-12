@@ -25,7 +25,7 @@ async def generate_leaderboard_embed(
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
     date_filter, title_suffix = build_window_filter(
-        season=season, year=year, month=month, quarter=quarter,
+        season=season, year=year, month=month, quarter=quarter, era=era,
     )
     era_filter, era_suffix = build_era_filter(era, column="s.wordle_number")
     min_clause = f"COUNT(*) >= {int(min_games)}" if min_games else "TRUE"
@@ -135,7 +135,7 @@ async def generate_leaderboard_embed(
 
 async def generate_count_board_embed(
     bot, table, title, value_label, colour, empty_message,
-    window, era="current", min_games=None,
+    window, era="current", min_games=None, guild=None,
 ):
     """Embed for the boards that just count rows per user.
 
@@ -145,10 +145,13 @@ async def generate_count_board_embed(
 
     `window` is the dict from range_filters.window_kwargs(). Every table is
     aliased `s`, so all three share one date column.
+
+    Pass `guild` to render current server nicknames rather than the username
+    stored when the row was written.
     """
     alias = "s"
-    date_filter, title_suffix = build_window_filter(**window, column=f"{alias}.date")
-    scores_date_filter, _ = build_window_filter(**window, column="sc.date")
+    date_filter, title_suffix = build_window_filter(**window, column=f"{alias}.date", era=era)
+    scores_date_filter, _ = build_window_filter(**window, column="sc.date", era=era)
     era_filter, era_suffix = build_era_filter(era, column=f"{alias}.wordle_number")
     scores_era_filter, _ = build_era_filter(era, column="sc.wordle_number")
 
@@ -193,8 +196,19 @@ async def generate_count_board_embed(
     embed = discord.Embed(title=title, color=colour)
     for idx, row in enumerate(rows, start=1):
         embed.add_field(
-            name=f"#{idx} {row['display_name']}",
+            name=f"#{idx} {_display_name(row, guild)}",
             value=f"{row['total']} {value_label}",
             inline=False,
         )
     return embed, None
+
+
+def _display_name(row, guild=None):
+    """Current nickname if the member is still in the guild, else the stored
+    username, else the raw id. `username` can be NULL on imported rows, which
+    would otherwise render as the string "None"."""
+    if guild is not None:
+        member = guild.get_member(row["user_id"])
+        if member is not None:
+            return member.display_name
+    return row["display_name"] or f"User ID {row['user_id']}"

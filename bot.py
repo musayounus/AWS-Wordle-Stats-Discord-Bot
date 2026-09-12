@@ -171,7 +171,14 @@ async def setup_hook():
     # 2) Load all cogs. Discovered rather than listed, so a new cogs/*.py is
     # picked up without also having to register it here. Cogs are independent,
     # so alphabetical load order is fine.
-    COGS_LIST = [f"cogs.{m.name}" for m in pkgutil.iter_modules(["cogs"])]
+    #
+    # Resolved against this file, not the process CWD: a bare "cogs" would yield
+    # nothing if the bot were ever started from another directory, and an empty
+    # list loads no cogs while printing no error at all.
+    cogs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cogs")
+    COGS_LIST = [f"cogs.{m.name}" for m in pkgutil.iter_modules([cogs_dir])]
+    if not COGS_LIST:
+        print(f"❌ No cogs discovered in {cogs_dir} — the bot will have no commands.")
     for cog in COGS_LIST:
         try:
             await bot.load_extension(cog)
