@@ -27,24 +27,30 @@ from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.leaderboard import FAIL_PENALTY
 from utils.range_filters import quarter_bounds, quarter_of
 
-CATEGORIES = (
-    "champion", "average", "uncontended", "solve", "aces",
-    "metronome", "improved", "streak", "best_month", "hardest",
+# The single source of truth for award categories: order, emoji and labels.
+#
+# Three label columns, because the two surfaces have different room. The
+# announcement embed covers one period and can spell it out; /quarterly_champions
+# and /yearly_champions list up to 25 periods in one embed and need the compact
+# form. Anything iterating awards should walk this table rather than keep its own
+# list, or a new award silently goes missing from one of the two.
+#
+#      category, emoji, quarter label, year label, compact label
+FIELDS = (
+    ("champion", "🏆", "Champion", "Champion", "Champion"),
+    ("average", "📊", "Best Average", "Best Average", "Best Average"),
+    ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns", "Most Uncontended"),
+    ("solve", "🧠", "Solve of the Quarter", "Solve of the Year", "Best Solve"),
+    ("aces", "⭐", "1/6 Solves", "1/6 Solves", "1/6 Solves"),
+    ("metronome", "🎯", "The Metronome", "The Metronome", "The Metronome"),
+    ("improved", "📈", "Most Improved", "Most Improved", "Most Improved"),
+    ("streak", "🔥", "Longest Streak", "Longest Streak", "Longest Streak"),
+    ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year", "Best Month"),
+    ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year", "Hardest Wordle"),
 )
 
-# Announcement order, with the label for each period type.
-_FIELDS = (
-    ("champion", "🏆", "Champion", "Champion"),
-    ("average", "📊", "Best Average", "Best Average"),
-    ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns"),
-    ("solve", "🧠", "Solve of the Quarter", "Solve of the Year"),
-    ("aces", "⭐", "1/6 Solves", "1/6 Solves"),
-    ("metronome", "🎯", "The Metronome", "The Metronome"),
-    ("improved", "📈", "Most Improved", "Most Improved"),
-    ("streak", "🔥", "Longest Streak", "Longest Streak"),
-    ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year"),
-    ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year"),
-)
+# (category, emoji, compact label) in announcement order, for the listing cogs.
+COMPACT_FIELDS = tuple((c, emoji, compact) for c, emoji, _, _, compact in FIELDS)
 
 # ── period arithmetic ─────────────────────────────────────────────────────────
 
@@ -583,7 +589,7 @@ def award_embed(period_type, year, period, awards):
         description=f"Congratulations to the winners of {label}!",
         color=0xF1C40F,
     )
-    for category, emoji, quarter_name, year_name in _FIELDS:
+    for category, emoji, quarter_name, year_name, _compact in FIELDS:
         a = awards.get(category)
         if a is None:
             continue

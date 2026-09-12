@@ -5,7 +5,8 @@ from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set
 from utils.parsing import calculate_streak
 from utils.range_filters import (
-    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES, build_era_filter,
+    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES,
+    build_era_filter, window_kwargs,
 )
 
 class LeaderboardCog(commands.Cog):
@@ -44,10 +45,7 @@ class LeaderboardCog(commands.Cog):
             self.bot,
             user_id=interaction.user.id,
             exclude_fails=exclude_fails,
-            year=year,
-            month=month.value if month else None,
-            quarter=quarter.value if quarter else None,
-            season=season.value if season else "current",
+            **window_kwargs(season, year, month, quarter),
             min_games=min_games,
             era=era.value if era else "current",
         )

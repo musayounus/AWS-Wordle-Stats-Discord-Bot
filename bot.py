@@ -44,25 +44,17 @@ bot = commands.Bot(command_prefix="!", intents=config.INTENTS)
 if config.TESTING_MODE:
     print("🔧 TESTING_MODE active: admin-only invocations, ephemeral responses.", flush=True)
 
-    _orig_ir_send = discord.InteractionResponse.send_message
-    _orig_ir_defer = discord.InteractionResponse.defer
-    _orig_wh_send = discord.Webhook.send
+    def _force_ephemeral(orig):
+        async def wrapper(self, *args, **kwargs):
+            kwargs.setdefault("ephemeral", True)
+            return await orig(self, *args, **kwargs)
+        return wrapper
 
-    async def _ir_send(self, *args, **kwargs):
-        kwargs.setdefault("ephemeral", True)
-        return await _orig_ir_send(self, *args, **kwargs)
-
-    async def _ir_defer(self, *args, **kwargs):
-        kwargs.setdefault("ephemeral", True)
-        return await _orig_ir_defer(self, *args, **kwargs)
-
-    async def _wh_send(self, *args, **kwargs):
-        kwargs.setdefault("ephemeral", True)
-        return await _orig_wh_send(self, *args, **kwargs)
-
-    discord.InteractionResponse.send_message = _ir_send
-    discord.InteractionResponse.defer = _ir_defer
-    discord.Webhook.send = _wh_send
+    discord.InteractionResponse.send_message = _force_ephemeral(
+        discord.InteractionResponse.send_message)
+    discord.InteractionResponse.defer = _force_ephemeral(
+        discord.InteractionResponse.defer)
+    discord.Webhook.send = _force_ephemeral(discord.Webhook.send)
 
     async def _testing_mode_check(interaction: discord.Interaction) -> bool:
         perms = getattr(interaction.user, "guild_permissions", None)

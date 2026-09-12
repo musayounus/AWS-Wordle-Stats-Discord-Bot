@@ -2,23 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.awards import period_label
-
-# Display order and label for each award category.
-LABELS = {
-    "champion": ("🏆", "Champion"),
-    "average": ("📊", "Best Average"),
-    "uncontended": ("🥇", "Most Uncontended"),
-    "solve": ("🧠", "Best Solve"),
-    "aces": ("⭐", "1/6 Solves"),
-    "metronome": ("🎯", "The Metronome"),
-    "improved": ("📈", "Most Improved"),
-    "streak": ("🔥", "Longest Streak"),
-    "best_month": ("📅", "Best Month"),
-    "hardest": ("💀", "Hardest Wordle"),
-}
-ORDER = ("champion", "average", "uncontended", "solve", "aces", "metronome",
-         "improved", "streak", "best_month", "hardest")
+from utils.awards import COMPACT_FIELDS, period_label
 
 
 class PeriodAwardsCog(commands.Cog):
@@ -51,11 +35,10 @@ class PeriodAwardsCog(commands.Cog):
         for (year, period) in list(grouped)[:25]:
             awards = grouped[(year, period)]
             lines = []
-            for category in ORDER:
+            for category, emoji, label in COMPACT_FIELDS:
                 r = awards.get(category)
                 if r is None:
                     continue
-                emoji, label = LABELS.get(category, ("•", category.title()))
                 if r["user_id"] is None:
                     # Group awards (hardest Wordle) describe a day, not a player.
                     lines.append(f"{emoji} **{label}:** {r['detail']}")
