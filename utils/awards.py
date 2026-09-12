@@ -25,6 +25,7 @@ import discord
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.leaderboard import FAIL_PENALTY
+from utils.range_filters import quarter_bounds, quarter_of
 
 CATEGORIES = (
     "champion", "average", "uncontended", "solve", "aces",
@@ -47,16 +48,8 @@ _FIELDS = (
 
 # ── period arithmetic ─────────────────────────────────────────────────────────
 
-def quarter_of(d: datetime.date) -> int:
-    return (d.month - 1) // 3 + 1
-
-
-def quarter_bounds(year: int, quarter: int):
-    """Return (start, end) dates for a quarter; end is exclusive."""
-    start = datetime.date(year, 3 * (quarter - 1) + 1, 1)
-    end = (datetime.date(year + 1, 1, 1) if quarter == 4
-           else datetime.date(year, 3 * quarter + 1, 1))
-    return start, end
+# quarter_of and quarter_bounds are imported from utils.range_filters, which
+# owns the date-window arithmetic shared with the season filters.
 
 
 def year_bounds(year: int):

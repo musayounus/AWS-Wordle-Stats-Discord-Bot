@@ -1,7 +1,7 @@
 import discord
 
 from utils.admin_helpers import NOT_VOIDED_SQL
-from utils.range_filters import build_date_filter, build_era_filter
+from utils.range_filters import build_era_filter, build_window_filter
 
 # Penalty attempts value for X/6 fails in avg calculations. NULLs in scores.attempts
 # are substituted with this value so fails count against a user's avg.
@@ -14,6 +14,8 @@ async def generate_leaderboard_embed(
     exclude_fails=False,
     year=None,
     month=None,
+    quarter=None,
+    season="current",
     min_games=None,
     era="current",
     deltas=None,
@@ -22,7 +24,9 @@ async def generate_leaderboard_embed(
         "WHERE s.user_id NOT IN (SELECT user_id FROM banned_users) "
         f"AND {NOT_VOIDED_SQL.format(alias='s')}"
     )
-    date_filter, title_suffix = build_date_filter(year=year, month=month)
+    date_filter, title_suffix = build_window_filter(
+        season=season, year=year, month=month, quarter=quarter,
+    )
     era_filter, era_suffix = build_era_filter(era, column="s.wordle_number")
     min_clause = f"COUNT(*) >= {int(min_games)}" if min_games else "TRUE"
     having_min = f"HAVING {min_clause}" if min_games else ""

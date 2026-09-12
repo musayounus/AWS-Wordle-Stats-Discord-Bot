@@ -2,7 +2,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.admin_helpers import NOT_VOIDED_SQL
-from utils.range_filters import MONTH_CHOICES, ERA_CHOICES, build_date_filter, build_era_filter
+from utils.range_filters import (
+    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES,
+    build_era_filter, build_window_filter,
+)
 
 class CrownsCog(commands.Cog):
     """Crown leaderboard showing first-place finishes."""
@@ -16,27 +19,33 @@ class CrownsCog(commands.Cog):
         month="Specific month (uses current year if year is omitted)",
         min_games="Only include users with at least this many games in the window",
         era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        season="current season (default) or all for the full era",
+        quarter="Specific quarter to show (uses current year if year is omitted)",
     )
-    @app_commands.choices(month=MONTH_CHOICES, era=ERA_CHOICES)
+    @app_commands.choices(
+        month=MONTH_CHOICES, era=ERA_CHOICES,
+        season=SEASON_CHOICES, quarter=QUARTER_CHOICES,
+    )
     async def crowns(
         self,
         interaction: discord.Interaction,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
+        quarter: app_commands.Choice[int] = None,
+        season: app_commands.Choice[str] = None,
         min_games: app_commands.Range[int, 1, 10000] = None,
         era: app_commands.Choice[str] = None,
     ):
         await interaction.response.defer(thinking=True)
         era_value = era.value if era else "current"
-        date_filter, title_suffix = build_date_filter(
+        window = dict(
+            season=season.value if season else "current",
             year=year,
             month=month.value if month else None,
+            quarter=quarter.value if quarter else None,
         )
-        scores_date_filter, _ = build_date_filter(
-            year=year,
-            month=month.value if month else None,
-            column="sc.date",
-        )
+        date_filter, title_suffix = build_window_filter(**window)
+        scores_date_filter, _ = build_window_filter(**window, column="sc.date")
         era_filter, era_suffix = build_era_filter(era_value, column="s.wordle_number")
         scores_era_filter, _ = build_era_filter(era_value, column="sc.wordle_number")
         min_games_clause = ""

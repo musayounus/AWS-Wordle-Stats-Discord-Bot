@@ -4,7 +4,9 @@ from discord.ext import commands
 from utils.leaderboard import FAIL_PENALTY, generate_leaderboard_embed
 from utils.admin_helpers import NOT_VOIDED_SQL, load_voided_set
 from utils.parsing import calculate_streak
-from utils.range_filters import MONTH_CHOICES, ERA_CHOICES, build_era_filter
+from utils.range_filters import (
+    MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES, build_era_filter,
+)
 
 class LeaderboardCog(commands.Cog):
     """Leaderboard display and personal stats commands."""
@@ -19,13 +21,20 @@ class LeaderboardCog(commands.Cog):
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
         min_games="Only include users with at least this many games in the window",
         era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        season="current season (default) or all for the full era",
+        quarter="Specific quarter to show (uses current year if year is omitted)",
     )
-    @app_commands.choices(month=MONTH_CHOICES, era=ERA_CHOICES)
+    @app_commands.choices(
+        month=MONTH_CHOICES, era=ERA_CHOICES,
+        season=SEASON_CHOICES, quarter=QUARTER_CHOICES,
+    )
     async def leaderboard(
         self,
         interaction: discord.Interaction,
         year: app_commands.Range[int, 2021, 2100] = None,
         month: app_commands.Choice[int] = None,
+        quarter: app_commands.Choice[int] = None,
+        season: app_commands.Choice[str] = None,
         exclude_fails: bool = False,
         min_games: app_commands.Range[int, 1, 10000] = None,
         era: app_commands.Choice[str] = None,
@@ -37,6 +46,8 @@ class LeaderboardCog(commands.Cog):
             exclude_fails=exclude_fails,
             year=year,
             month=month.value if month else None,
+            quarter=quarter.value if quarter else None,
+            season=season.value if season else "current",
             min_games=min_games,
             era=era.value if era else "current",
         )

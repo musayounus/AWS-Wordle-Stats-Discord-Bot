@@ -31,6 +31,17 @@ WORDLE_TZ = os.getenv("WORDLE_TZ", "Asia/Riyadh")
 # legacy reachable via era=legacy param. Env-overridable for future cutovers.
 CURRENT_ERA_START_WORDLE = int(os.getenv("CURRENT_ERA_START_WORDLE", 1777))
 
+# ── Seasons ───────────────────────────────────────────────────────────────────
+# The default leaderboard, crown, uncontended and fail boards show only the
+# quarter currently in progress, so standings start fresh each quarter like a
+# game season. Nothing is ever deleted: the window is purely a query filter, and
+# season=all restores the full-era view.
+#
+# Seasons begin at Q4 2026 (1 October 2026). Before that point no season filter
+# is applied at all, so behaviour is unchanged until the cutover date.
+SEASON_FIRST_YEAR = int(os.getenv("SEASON_FIRST_YEAR", 2026))
+SEASON_FIRST_QUARTER = int(os.getenv("SEASON_FIRST_QUARTER", 4))
+
 # Minimum games played in a calendar month to qualify for the monthly crown.
 # Applies both to the winner query and the monthly recap leaderboard, so the
 # crowned user is always the top row of the board posted beside it.
