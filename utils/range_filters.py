@@ -4,7 +4,7 @@ import datetime
 from discord import app_commands
 
 import config
-from utils.admin_helpers import wordle_today
+from utils.admin_helpers import wordle_date_for_number, wordle_today
 
 MONTH_CHOICES = [
     app_commands.Choice(name=calendar.month_name[m], value=m) for m in range(1, 13)
@@ -40,6 +40,21 @@ def quarter_bounds(year: int, quarter: int):
     end = (datetime.date(year + 1, 1, 1) if quarter == 4
            else datetime.date(year, 3 * quarter + 1, 1))
     return start, end
+
+
+def season_of_wordle(wordle_number: int):
+    """(year, quarter) the given wordle number falls in."""
+    d = wordle_date_for_number(int(wordle_number))
+    return d.year, quarter_of(d)
+
+
+def same_season(a: int, b: int) -> bool:
+    """True when two wordle numbers fall in the same quarter.
+
+    Used to decide whether a prior leaderboard snapshot is comparable: one from
+    an earlier season ranked a different set of games entirely.
+    """
+    return season_of_wordle(a) == season_of_wordle(b)
 
 
 def current_season(today: datetime.date = None):

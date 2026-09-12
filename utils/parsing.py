@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.leaderboard import FAIL_PENALTY
+from utils.range_filters import build_era_filter, build_window_filter, same_season
 from utils import awards as awards_mod
 from utils.user_resolver import (
     build_cache_from_mentions,
@@ -335,8 +336,15 @@ async def parse_summary_message(bot, message):
             message.id, message.created_at, wordle_number, group_streak,
         )
 
-        # Snapshot current-era ranking and diff vs the latest prior snapshot,
-        # so the auto-post below can show ⬆️/⬇️ arrows when ranks change.
+        # Snapshot the ranking and diff it against the latest prior snapshot, so
+        # the auto-post below can show ⬆️/⬇️ arrows when ranks change.
+        #
+        # This MUST use the same window as the board the arrows are drawn on -
+        # generate_leaderboard_embed(bot, deltas=deltas), i.e. no arguments, the
+        # season in progress. Scoping this era-wide while the board is seasonal
+        # puts arrows describing era movement next to season ranks.
+        rank_window_filter, _ = build_window_filter()
+        rank_era_filter, _ = build_era_filter("current", column="s.wordle_number")
         current_ranks = await conn.fetch(f"""
             SELECT
                 s.user_id,
@@ -350,13 +358,13 @@ async def parse_summary_message(bot, message):
             FROM scores s
             WHERE s.user_id NOT IN (SELECT user_id FROM banned_users)
               AND {NOT_VOIDED_SQL.format(alias='s')}
-              AND s.wordle_number >= {int(config.CURRENT_ERA_START_WORDLE)}
+              {rank_window_filter} {rank_era_filter}
             GROUP BY s.user_id
         """)
 
         prior = await conn.fetch(
             """
-            SELECT user_id, rank
+            SELECT user_id, rank, wordle_number
             FROM leaderboard_snapshots
             WHERE wordle_number = (
                 SELECT MAX(wordle_number) FROM leaderboard_snapshots
@@ -367,14 +375,18 @@ async def parse_summary_message(bot, message):
         )
         prior_by_user = {r["user_id"]: r["rank"] for r in prior}
 
+        # A snapshot from an earlier season ranked a different set of games, so
+        # diffing against it would show every player swinging wildly on the first
+        # day of a season. Drop the arrows for that one post instead.
         deltas = {}
-        for r in current_ranks:
-            yr = prior_by_user.get(r["user_id"])
-            if yr is None:
-                continue
-            d = yr - r["rank"]
-            if d != 0:
-                deltas[r["user_id"]] = d
+        if prior and same_season(prior[0]["wordle_number"], wordle_number):
+            for r in current_ranks:
+                yr = prior_by_user.get(r["user_id"])
+                if yr is None:
+                    continue
+                d = yr - r["rank"]
+                if d != 0:
+                    deltas[r["user_id"]] = d
 
         if current_ranks:
             await conn.executemany(

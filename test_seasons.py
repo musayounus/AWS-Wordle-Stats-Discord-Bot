@@ -8,11 +8,14 @@ what keeps the monthly recap posts correct).
 """
 import datetime
 
+from utils.admin_helpers import WORDLE_START
 from utils.range_filters import (
     build_window_filter,
     current_season,
     quarter_bounds,
     quarter_of,
+    same_season,
+    season_of_wordle,
 )
 
 BEFORE = datetime.date(2026, 9, 12)   # Q3 2026, before seasons start
@@ -85,6 +88,29 @@ def test_column_is_honoured():
     sql, _ = build_window_filter(today=MID, column="f.date")
     assert "f.date >= DATE '2026-10-01'" in sql
     assert "s.date" not in sql
+
+
+def _wordle_on(d: datetime.date) -> int:
+    """The wordle number for a given date, inverse of wordle_date_for_number."""
+    return (d - WORDLE_START).days
+
+
+def test_season_of_wordle():
+    assert season_of_wordle(_wordle_on(datetime.date(2026, 9, 30))) == (2026, 3)
+    assert season_of_wordle(_wordle_on(FIRST)) == (2026, 4)
+    assert season_of_wordle(_wordle_on(NEXT)) == (2027, 1)
+
+
+def test_same_season_gates_the_arrows():
+    """A snapshot from the previous season must not be diffed against."""
+    q3 = _wordle_on(datetime.date(2026, 9, 30))
+    q4_start = _wordle_on(FIRST)
+    q4_mid = _wordle_on(MID)
+
+    assert not same_season(q3, q4_start)   # 1 Oct: arrows suppressed
+    assert same_season(q4_start, q4_mid)   # inside the season: arrows shown
+    assert same_season(q3, q3 - 1)         # inside the old season too
+    assert not same_season(q4_mid, _wordle_on(NEXT))
 
 
 if __name__ == "__main__":
