@@ -1,10 +1,10 @@
 import calendar
 import datetime
-from zoneinfo import ZoneInfo
 
 from discord import app_commands
 
 import config
+from utils.admin_helpers import wordle_today
 
 MONTH_CHOICES = [
     app_commands.Choice(name=calendar.month_name[m], value=m) for m in range(1, 13)
@@ -42,11 +42,6 @@ def quarter_bounds(year: int, quarter: int):
     return start, end
 
 
-def wordle_today() -> datetime.date:
-    """Today's date in WORDLE_TZ, matching how scores are dated."""
-    return datetime.datetime.now(ZoneInfo(config.WORDLE_TZ)).date()
-
-
 def current_season(today: datetime.date = None):
     """(year, quarter) of the season in progress, or None before seasons start.
 
@@ -56,7 +51,7 @@ def current_season(today: datetime.date = None):
     if today is None:
         today = wordle_today()
     season = (today.year, quarter_of(today))
-    if season < (int(config.SEASON_FIRST_YEAR), int(config.SEASON_FIRST_QUARTER)):
+    if season < (config.SEASON_FIRST_YEAR, config.SEASON_FIRST_QUARTER):
         return None
     return season
 
@@ -100,36 +95,41 @@ def build_window_filter(season="current", year=None, month=None, quarter=None,
                         column="s.date", today=None):
     """Return (sql_fragment, title_suffix) for the time window of a board.
 
-    Resolution order, most explicit first:
-
-      quarter given      → that quarter (year defaults to the current year)
+    Most explicit wins:
+      quarter            → that quarter (year defaults to the current year)
       year and/or month  → that calendar range, season ignored
-      season="all"       → no window at all, the whole era
-      otherwise          → the season in progress, or no window before cutover
+      season="all"       → the whole era
+      otherwise          → the season in progress, or nothing before cutover
 
-    An explicit year/month view always wins over the season default, which is
-    what keeps the monthly recap posts (which pass year and month) showing a
-    full month rather than a month intersected with the current quarter.
+    The year/month rule is load-bearing: the monthly recap passes both, so it
+    must get a whole month, not a month intersected with the current quarter.
     """
     if quarter is not None:
         y = int(year) if year is not None else (today or wordle_today()).year
-        return _quarter_filter(y, int(quarter), column)
-
-    if year is not None or month is not None:
+        q = int(quarter)
+    elif year is not None or month is not None:
         return build_date_filter(year=year, month=month, column=column)
-
-    if season == "all":
+    elif season == "all":
         return "", "All Time"
+    else:
+        current = current_season(today)
+        if current is None:
+            return "", None
+        y, q = current
 
-    current = current_season(today)
-    if current is None:
-        return "", None
-    return _quarter_filter(current[0], current[1], column)
-
-
-def _quarter_filter(year: int, quarter: int, column: str):
-    start, end = quarter_bounds(int(year), int(quarter))
+    start, end = quarter_bounds(y, q)
     return (
         f"AND {column} >= DATE '{start}' AND {column} < DATE '{end}'",
-        f"Q{int(quarter)} {int(year)}",
+        f"Q{q} {y}",
+    )
+
+
+def window_kwargs(season, year, month, quarter):
+    """Unwrap the app_commands Choice objects a board receives into
+    build_window_filter kwargs. Same four params on every seasonal board."""
+    return dict(
+        season=season.value if season else "current",
+        year=year,
+        month=month.value if month else None,
+        quarter=quarter.value if quarter else None,
     )

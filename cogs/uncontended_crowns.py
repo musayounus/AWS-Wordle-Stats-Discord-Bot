@@ -4,7 +4,7 @@ from discord.ext import commands
 from utils.admin_helpers import NOT_VOIDED_SQL
 from utils.range_filters import (
     MONTH_CHOICES, ERA_CHOICES, QUARTER_CHOICES, SEASON_CHOICES,
-    build_era_filter, build_window_filter,
+    build_era_filter, build_window_filter, window_kwargs,
 )
 
 class UncontendedCrownsCog(commands.Cog):
@@ -38,12 +38,7 @@ class UncontendedCrownsCog(commands.Cog):
     ):
         await interaction.response.defer(thinking=True)
         era_value = era.value if era else "current"
-        window = dict(
-            season=season.value if season else "current",
-            year=year,
-            month=month.value if month else None,
-            quarter=quarter.value if quarter else None,
-        )
+        window = window_kwargs(season, year, month, quarter)
         date_filter, title_suffix = build_window_filter(**window)
         scores_date_filter, _ = build_window_filter(**window, column="sc.date")
         era_filter, era_suffix = build_era_filter(era_value, column="s.wordle_number")

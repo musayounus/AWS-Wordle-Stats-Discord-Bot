@@ -26,6 +26,11 @@ NOT_VOIDED_SQL = (
 )
 
 
+def wordle_today() -> datetime.date:
+    """Today's date in WORDLE_TZ, the clock scores are dated by."""
+    return datetime.datetime.now(ZoneInfo(config.WORDLE_TZ)).date()
+
+
 def current_wordle_number(today: Optional[datetime.date] = None) -> int:
     """Today's Wordle number, in the Wordle timezone.
 
@@ -35,7 +40,7 @@ def current_wordle_number(today: Optional[datetime.date] = None) -> int:
     dropped that day from streaks and made admin commands reject it as future.
     """
     if today is None:
-        today = datetime.datetime.now(ZoneInfo(config.WORDLE_TZ)).date()
+        today = wordle_today()
     return (today - WORDLE_START).days
 
 
