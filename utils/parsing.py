@@ -5,7 +5,12 @@ from zoneinfo import ZoneInfo
 import config
 from utils.admin_helpers import NOT_VOIDED_SQL, current_wordle_number, validate_wordle_number
 from utils.leaderboard import FAIL_PENALTY
-from utils.range_filters import build_era_filter, build_window_filter, snapshot_comparable
+from utils.range_filters import (
+    build_era_filter,
+    build_window_filter,
+    season_for_wordle,
+    snapshot_comparable,
+)
 from utils import awards as awards_mod
 from utils.user_resolver import (
     build_cache_from_mentions,
@@ -339,11 +344,18 @@ async def parse_summary_message(bot, message):
         # Snapshot the ranking and diff it against the latest prior snapshot, so
         # the auto-post below can show ⬆️/⬇️ arrows when ranks change.
         #
-        # This MUST use the same window as the board the arrows are drawn on -
-        # generate_leaderboard_embed(bot, deltas=deltas), i.e. no arguments, the
-        # season in progress. Scoping this era-wide while the board is seasonal
-        # puts arrows describing era movement next to season ranks.
-        rank_window_filter, _ = build_window_filter()
+        # Everything about this post - the snapshot, the board and the arrow
+        # gate - is windowed on the season of *this summary's* wordle, not on
+        # today. A summary reports yesterday, so on 1 October it covers
+        # 30 September and belongs to Q3; windowing on today would rank the
+        # brand-new, empty Q4 instead. `summary_window` is passed to
+        # generate_leaderboard_embed below so the two cannot drift apart.
+        summary_season = season_for_wordle(wordle_number)
+        summary_window = (
+            dict(quarter=summary_season[1], year=summary_season[0])
+            if summary_season else dict(season="all")
+        )
+        rank_window_filter, _ = build_window_filter(**summary_window)
         rank_era_filter, _ = build_era_filter("current", column="s.wordle_number")
         current_ranks = await conn.fetch(f"""
             SELECT
@@ -376,12 +388,10 @@ async def parse_summary_message(bot, message):
         prior_by_user = {r["user_id"]: r["rank"] for r in prior}
 
         # A snapshot from an earlier season ranked a different set of games, so
-        # diffing against it would show every player swinging wildly on the first
-        # day of a season. Drop the arrows for that one post instead. Compared
-        # against today's season, which is what current_ranks above queried -
-        # not against wordle_number, which is yesterday's summary.
+        # diffing against it would show every player swinging wildly on the
+        # first day of a season. Drop the arrows for that one post instead.
         deltas = {}
-        if prior and snapshot_comparable(prior[0]["wordle_number"]):
+        if prior and snapshot_comparable(prior[0]["wordle_number"], summary_season):
             for r in current_ranks:
                 yr = prior_by_user.get(r["user_id"])
                 if yr is None:
@@ -543,12 +553,12 @@ async def parse_summary_message(bot, message):
 
     posted_deltas = False
     if ranks_changed:
-        embed = await generate_leaderboard_embed(bot, deltas=deltas)
+        embed = await generate_leaderboard_embed(bot, deltas=deltas, **summary_window)
         await message.channel.send(embed=embed)
         posted_deltas = True
 
     if not posted_this_week and not posted_deltas:
-        embed = await generate_leaderboard_embed(bot)
+        embed = await generate_leaderboard_embed(bot, **summary_window)
         await message.channel.send(embed=embed)
 
     if not posted_this_month and prev_winner is not None:

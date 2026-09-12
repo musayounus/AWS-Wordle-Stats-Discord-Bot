@@ -2,6 +2,7 @@ import os
 import sys
 import io
 import pkgutil
+import functools
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -45,6 +46,7 @@ if config.TESTING_MODE:
     print("🔧 TESTING_MODE active: admin-only invocations, ephemeral responses.", flush=True)
 
     def _force_ephemeral(orig):
+        @functools.wraps(orig)
         async def wrapper(self, *args, **kwargs):
             kwargs.setdefault("ephemeral", True)
             return await orig(self, *args, **kwargs)

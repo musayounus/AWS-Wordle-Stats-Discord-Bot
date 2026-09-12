@@ -14,6 +14,7 @@ from utils.range_filters import (
     current_season,
     quarter_bounds,
     quarter_of,
+    season_for_wordle,
     season_of_wordle,
     snapshot_comparable,
 )
@@ -101,34 +102,44 @@ def test_season_of_wordle():
     assert season_of_wordle(_wordle_on(NEXT)) == (2027, 1)
 
 
-def test_snapshot_comparable_uses_todays_season():
-    """The gate must compare against the season actually queried.
+def test_season_for_wordle_gates_on_the_cutover():
+    assert season_for_wordle(_wordle_on(datetime.date(2026, 6, 15))) is None   # Q2, pre
+    assert season_for_wordle(_wordle_on(datetime.date(2026, 9, 30))) is None   # Q3, pre
+    assert season_for_wordle(_wordle_on(FIRST)) == (2026, 4)
+    assert season_for_wordle(_wordle_on(NEXT)) == (2027, 1)
 
-    The snapshot query windows on *today*, but the daily summary reports
-    yesterday. On 1 October the summary's wordle is still Q3, so comparing the
-    snapshot to the summary's wordle would wrongly pass and show the very
-    arrows this is meant to suppress.
+
+def test_summary_window_uses_the_summarys_season_not_today():
+    """The 1 October case: the summary covers 30 September, which is Q3.
+
+    Windowing on today would rank the brand-new empty Q4 and post it beside
+    Q3 results. Q3 is before the cutover, so the correct answer here is no
+    window at all - and from 1 January onward it is the completed quarter.
     """
-    q3_last = _wordle_on(datetime.date(2026, 9, 30))
+    sep30 = _wordle_on(datetime.date(2026, 9, 30))
+    assert season_for_wordle(sep30) is None          # -> season="all", no window
+
+    # 1 Jan 2027: summary covers 31 Dec 2026, which is Q4 2026, not Q1 2027.
+    dec31 = _wordle_on(datetime.date(2026, 12, 31))
+    season = season_for_wordle(dec31)
+    assert season == (2026, 4)
+    sql, title = build_window_filter(quarter=season[1], year=season[0])
+    assert title == "Q4 2026"
+    assert "s.date >= DATE '2026-10-01'" in sql
+    assert "2027-01-01" in sql   # exclusive upper bound
+
+
+def test_snapshot_comparable_against_the_passed_season():
+    """The gate compares against whatever window the caller queried."""
     q4_mid = _wordle_on(MID)
+    q3_last = _wordle_on(datetime.date(2026, 9, 30))
 
-    # 1 Oct: yesterday's snapshot is Q3, today's window is Q4 -> not comparable
-    assert not snapshot_comparable(q3_last, today=FIRST)
-    # inside a season: comparable
-    assert snapshot_comparable(q4_mid, today=MID)
-    # new year rolls to Q1 2027, so a Q4 snapshot is stale again
-    assert not snapshot_comparable(q4_mid, today=NEXT)
-
-
-def test_snapshot_comparable_is_inert_before_cutover():
-    """Pre-cutover the window is era-wide, so no snapshot is ever stale.
-
-    Without this, a quarter boundary before the cutover would silently drop a
-    delta post for no reason.
-    """
-    q2 = _wordle_on(datetime.date(2026, 6, 15))
-    assert snapshot_comparable(q2, today=BEFORE)
-    assert snapshot_comparable(q2, today=datetime.date(2026, 7, 1))
+    assert snapshot_comparable(q4_mid, (2026, 4))
+    assert not snapshot_comparable(q3_last, (2026, 4))
+    assert not snapshot_comparable(q4_mid, (2027, 1))
+    # None means no season window applied, so anything is comparable
+    assert snapshot_comparable(q3_last, None)
+    assert snapshot_comparable(q4_mid, None)
 
 
 def test_legacy_era_skips_the_season_window():

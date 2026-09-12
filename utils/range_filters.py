@@ -48,22 +48,29 @@ def season_of_wordle(wordle_number: int):
     return d.year, quarter_of(d)
 
 
-def snapshot_comparable(prior_wordle: int, today: datetime.date = None) -> bool:
-    """True when a prior snapshot was ranked over the window in use right now.
+def season_for_wordle(wordle_number: int):
+    """(year, quarter) for a wordle, or None if it predates the cutover.
 
-    The snapshot query uses build_window_filter() with no arguments, i.e. the
-    season containing *today*. It must therefore be compared against today's
-    season, not against the summary's wordle number: a daily summary reports
-    yesterday's results, so on the first day of a season the summary's wordle
-    still belongs to the previous one and comparing the two would wrongly pass.
-
-    Before the cutover there is no season window, so every snapshot is
-    comparable and the arrows behave as they always did.
+    A daily summary reports *yesterday*, so anything scoped to a summary must be
+    windowed on that wordle's season rather than on today. On 1 October the
+    summary covers 30 September, which still belongs to Q3.
     """
-    season = current_season(today)
+    season = season_of_wordle(wordle_number)
+    if season < (config.SEASON_FIRST_YEAR, config.SEASON_FIRST_QUARTER):
+        return None
+    return season
+
+
+def snapshot_comparable(prior_wordle: int, season) -> bool:
+    """True when a prior snapshot was ranked over `season`, the window in use.
+
+    `season` is whatever the caller actually queried, passed in rather than
+    recomputed, so the window and this gate cannot disagree. None means no
+    season window applied, in which case every snapshot is comparable.
+    """
     if season is None:
         return True
-    return season_of_wordle(prior_wordle) == season
+    return season_of_wordle(prior_wordle) == tuple(season)
 
 
 def current_season(today: datetime.date = None):
@@ -159,9 +166,12 @@ def build_window_filter(season="current", year=None, month=None, quarter=None,
     )
 
 
-def window_kwargs(season, year, month, quarter):
+def window_kwargs(*, season, year, month, quarter):
     """Unwrap the app_commands Choice objects a board receives into
-    build_window_filter kwargs. Same four params on every seasonal board."""
+    build_window_filter kwargs. Same four params on every seasonal board.
+
+    Keyword-only: month and quarter are both Choice[int], so a transposed
+    positional call would be silently wrong."""
     return dict(
         season=season.value if season else "current",
         year=year,

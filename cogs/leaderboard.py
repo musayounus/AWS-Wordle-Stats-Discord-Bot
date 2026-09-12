@@ -45,7 +45,7 @@ class LeaderboardCog(commands.Cog):
             self.bot,
             user_id=interaction.user.id,
             exclude_fails=exclude_fails,
-            **window_kwargs(season, year, month, quarter),
+            **window_kwargs(season=season, year=year, month=month, quarter=quarter),
             min_games=min_games,
             era=era.value if era else "current",
         )

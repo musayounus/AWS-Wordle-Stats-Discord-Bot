@@ -39,14 +39,17 @@ from utils.range_filters import quarter_bounds, quarter_of
 FIELDS = (
     ("champion", "🏆", "Champion", "Champion", "Champion"),
     ("average", "📊", "Best Average", "Best Average", "Best Average"),
-    ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns", "Most Uncontended"),
+    ("uncontended", "🥇", "Most Uncontended Crowns", "Most Uncontended Crowns",
+     "Most Uncontended"),
     ("solve", "🧠", "Solve of the Quarter", "Solve of the Year", "Best Solve"),
     ("aces", "⭐", "1/6 Solves", "1/6 Solves", "1/6 Solves"),
     ("metronome", "🎯", "The Metronome", "The Metronome", "The Metronome"),
     ("improved", "📈", "Most Improved", "Most Improved", "Most Improved"),
     ("streak", "🔥", "Longest Streak", "Longest Streak", "Longest Streak"),
-    ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year", "Best Month"),
-    ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year", "Hardest Wordle"),
+    ("best_month", "📅", "Best Month of the Quarter", "Best Month of the Year",
+     "Best Month"),
+    ("hardest", "💀", "Hardest Wordle of the Quarter", "Hardest Wordle of the Year",
+     "Hardest Wordle"),
 )
 
 # (category, emoji, compact label) in announcement order, for the listing cogs.

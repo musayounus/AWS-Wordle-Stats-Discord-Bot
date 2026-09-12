@@ -49,7 +49,7 @@ class FailsCog(commands.Cog):
             value_label="Fails 💀",
             colour=0xff0000,
             empty_message="💀 No fails for this range.",
-            window=window_kwargs(season, year, month, quarter),
+            window=window_kwargs(season=season, year=year, month=month, quarter=quarter),
             era=era.value if era else "current",
             min_games=min_games,
             guild=interaction.guild,

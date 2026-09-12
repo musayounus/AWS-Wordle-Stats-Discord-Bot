@@ -44,7 +44,7 @@ class CrownsCog(commands.Cog):
             value_label="Crowns 👑",
             colour=0xf1c40f,
             empty_message="👑 No crown data for this range.",
-            window=window_kwargs(season, year, month, quarter),
+            window=window_kwargs(season=season, year=year, month=month, quarter=quarter),
             era=era.value if era else "current",
             min_games=min_games,
             guild=interaction.guild,

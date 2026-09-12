@@ -35,7 +35,14 @@ class PeriodAwardsCog(commands.Cog):
         for (year, period) in list(grouped)[:25]:
             awards = grouped[(year, period)]
             lines = []
-            for category, emoji, label in COMPACT_FIELDS:
+            # Known categories in announcement order, then anything stored that
+            # FIELDS no longer lists - a retired award such as `unbroken`, which
+            # was dropped after the table already existed. Without the tail these
+            # rows would silently vanish from the listing.
+            known = [(c, e, l) for c, e, l in COMPACT_FIELDS]
+            extra = [(c, "•", c.replace("_", " ").title())
+                     for c in awards if c not in {c for c, _, _ in COMPACT_FIELDS}]
+            for category, emoji, label in known + extra:
                 r = awards.get(category)
                 if r is None:
                     continue
