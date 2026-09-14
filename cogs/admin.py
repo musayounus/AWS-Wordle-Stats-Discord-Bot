@@ -161,8 +161,8 @@ class AdminCog(commands.Cog):
                 """
                 INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                 VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (username, wordle_number) DO UPDATE
-                SET attempts = $5
+                ON CONFLICT (user_id, wordle_number) DO UPDATE
+                SET attempts = $5, username = $2
                 """,
                 user.id, user.display_name, wordle_number, date, attempts_val,
             )
@@ -287,7 +287,7 @@ class AdminCog(commands.Cog):
                         await conn.execute("""
                             INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                             VALUES ($1, $2, $3, $4, $5)
-                            ON CONFLICT (username, wordle_number) DO NOTHING
+                            ON CONFLICT (user_id, wordle_number) DO NOTHING
                         """, message.author.id, message.author.display_name, wn, date, attempts)
                         count += 1
                         if attempts is None:
@@ -368,7 +368,7 @@ class AdminCog(commands.Cog):
                             await conn.execute("""
                                 INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                                 VALUES ($1, $2, $3, $4, $5)
-                                ON CONFLICT (username, wordle_number) DO NOTHING
+                                ON CONFLICT (user_id, wordle_number) DO NOTHING
                             """, uid, uname, wn, date, att)
                             count += 1
                             if att is None:
@@ -507,8 +507,8 @@ class AdminCog(commands.Cog):
                     """
                     INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                     VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT (username, wordle_number) DO UPDATE
-                    SET attempts = $5
+                    ON CONFLICT (user_id, wordle_number) DO UPDATE
+                    SET attempts = $5, username = $2
                     """,
                     user.id, user.display_name, wordle_number, date, attempts_val,
                 )

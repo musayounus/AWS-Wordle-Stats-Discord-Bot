@@ -87,8 +87,8 @@ class FailsCog(commands.Cog):
                 """
                 INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                 VALUES ($1, $2, $3, $4, NULL)
-                ON CONFLICT (username, wordle_number) DO UPDATE
-                SET attempts = NULL
+                ON CONFLICT (user_id, wordle_number) DO UPDATE
+                SET attempts = NULL, username = $2
                 """,
                 user.id, user.display_name, wordle_number, date,
             )

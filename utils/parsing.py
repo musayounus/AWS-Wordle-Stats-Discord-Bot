@@ -137,8 +137,8 @@ async def parse_wordle_message(bot, message):
         await conn.execute("""
             INSERT INTO scores (user_id, username, wordle_number, date, attempts)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (username, wordle_number) DO UPDATE
-            SET attempts = $5
+            ON CONFLICT (user_id, wordle_number) DO UPDATE
+            SET attempts = $5, username = $2
         """, user.id, user.display_name, wordle_number, date, attempts)
 
         # For fails, also record in fails table
@@ -283,8 +283,8 @@ async def parse_summary_message(bot, message):
             await conn.execute("""
                 INSERT INTO scores (user_id, username, wordle_number, date, attempts)
                 VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (username, wordle_number) DO UPDATE
-                SET attempts = $5
+                ON CONFLICT (user_id, wordle_number) DO UPDATE
+                SET attempts = $5, username = $2
             """, user_id, username, wordle_number, date, attempts)
 
             # For fails, also record in fails table
