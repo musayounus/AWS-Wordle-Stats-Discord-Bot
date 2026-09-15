@@ -1,5 +1,6 @@
 discord.py
 asyncpg
+matplotlib
 boto3
 python-dotenv
 psutil
