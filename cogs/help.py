@@ -71,7 +71,8 @@ class HelpCog(commands.Cog):
             _command_lines(self.bot.tree, admin=False),
             footer=(
                 "\n*season: `current` (this quarter, default) or `all` (full era)*\n"
-                "*era: `current` (Wordle #1777+, default) or `legacy` (pre-#1777)*"
+                "*era: `current` (Wordle #1777+, default), `legacy` (pre-#1777) "
+                "or `combined` (both eras together)*"
             ),
         )
 

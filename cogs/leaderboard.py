@@ -21,7 +21,7 @@ class LeaderboardCog(commands.Cog):
         month="Specific month to filter by (1–12); combined with year or current year",
         exclude_fails="If true, X/6 fails don't penalize avg (ranking uses successful games only)",
         min_games="Only include users with at least this many games in the window",
-        era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        era="current (Wordle #1777+, default), legacy (pre-#1777) or combined (both)",
         season="current season (default) or all for the full era",
         quarter="Specific quarter to show (uses current year if year is omitted; overrides month)",
     )
@@ -55,7 +55,7 @@ class LeaderboardCog(commands.Cog):
     @app_commands.describe(
         user="Optional user to check (defaults to yourself)",
         exclude_fails="If true, X/6 fails don't penalize avg score",
-        era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        era="current (Wordle #1777+, default), legacy (pre-#1777) or combined (both)",
     )
     @app_commands.choices(era=ERA_CHOICES)
     async def stats(
@@ -96,8 +96,10 @@ class LeaderboardCog(commands.Cog):
                 {era_filter}
             """, target_user.id)
 
+            # Wordle numbers run continuously across #1777, so a combined streak
+            # is real. A legacy-only streak would be cut off at the boundary.
             streak_count = 0
-            if era_value == "current":
+            if era_value != "legacy":
                 streak_rows = await conn.fetch(f"""
                     SELECT wordle_number
                     FROM scores s
@@ -134,7 +136,7 @@ class LeaderboardCog(commands.Cog):
         embed.add_field(name="Fails (X/6)", value=stats['fails'], inline=True)
         embed.add_field(name="Games Played", value=stats['games_played'], inline=True)
         embed.add_field(name="Last Played", value=stats['last_game'] or "—", inline=True)
-        if era_value == "current" and streak_count > 0:
+        if streak_count > 0:
             embed.add_field(name="Current Streak 🔥", value=f"{streak_count} in a row", inline=True)
 
         await interaction.followup.send(embed=embed)

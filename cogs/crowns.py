@@ -18,7 +18,7 @@ class CrownsCog(commands.Cog):
         year="Specific year to filter by",
         month="Specific month (uses current year if year is omitted)",
         min_games="Only include users with at least this many games in the window",
-        era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        era="current (Wordle #1777+, default), legacy (pre-#1777) or combined (both)",
         season="current season (default) or all for the full era",
         quarter="Specific quarter to show (uses current year if year is omitted; overrides month)",
     )

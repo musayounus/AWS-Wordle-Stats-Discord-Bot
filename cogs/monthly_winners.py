@@ -23,7 +23,7 @@ class MonthlyWinnersCog(commands.Cog):
         description="Show the 1st-place winner of each past month",
     )
     @app_commands.describe(
-        era="current (May 2026 onward, default) or legacy (before May 2026)",
+        era="current (May 2026 onward, default), legacy (before May 2026) or combined (both)",
     )
     @app_commands.choices(era=ERA_CHOICES)
     async def monthly_winners(
@@ -37,6 +37,10 @@ class MonthlyWinnersCog(commands.Cog):
             era_clause = f"WHERE (year, month) < ({ERA_BOUNDARY_YEAR}, {ERA_BOUNDARY_MONTH})"
             empty_msg = "📅 No legacy monthly winners recorded."
             title_suffix = " — Legacy"
+        elif era_value == "combined":
+            era_clause = ""
+            empty_msg = "📅 No monthly winners recorded."
+            title_suffix = " — Combined Eras"
         else:
             era_clause = f"WHERE (year, month) >= ({ERA_BOUNDARY_YEAR}, {ERA_BOUNDARY_MONTH})"
             empty_msg = (

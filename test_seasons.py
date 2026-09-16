@@ -10,6 +10,7 @@ import datetime
 
 from utils.admin_helpers import WORDLE_START
 from utils.range_filters import (
+    build_era_filter,
     build_window_filter,
     current_season,
     quarter_bounds,
@@ -162,6 +163,28 @@ def test_legacy_era_skips_the_season_window():
     # current era is unaffected
     sql, _ = build_window_filter(era="current", today=MID)
     assert "2026-10-01" in sql
+
+
+def test_combined_era_drops_the_era_predicate():
+    """era=combined counts both eras, so it filters on neither."""
+    sql, title = build_era_filter("combined")
+    assert sql == ""
+    assert title == "Combined Eras"
+
+    # the other two still carry their cutoff predicate
+    assert "<" in build_era_filter("legacy")[0]
+    assert ">=" in build_era_filter("current")[0]
+
+
+def test_combined_era_skips_the_season_window():
+    """Combined means the whole history, not the quarter in progress."""
+    sql, title = build_window_filter(era="combined", today=MID)
+    assert sql == ""
+    assert title is None
+
+    # an explicit range still narrows it
+    sql, _ = build_window_filter(era="combined", quarter=4, year=2026, today=MID)
+    assert "s.date >= DATE '2026-10-01'" in sql
 
 
 if __name__ == "__main__":

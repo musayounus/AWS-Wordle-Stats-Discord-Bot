@@ -13,6 +13,7 @@ MONTH_CHOICES = [
 ERA_CHOICES = [
     app_commands.Choice(name="current", value="current"),
     app_commands.Choice(name="legacy", value="legacy"),
+    app_commands.Choice(name="combined", value="combined"),
 ]
 
 SEASON_CHOICES = [
@@ -90,12 +91,15 @@ def current_season(today: datetime.date = None):
 def build_era_filter(era="current", column="s.wordle_number"):
     """Return (sql_fragment, title_suffix) for the given era.
 
-    current → wordle_number >= CURRENT_ERA_START_WORDLE (no title annotation)
-    legacy  → wordle_number <  CURRENT_ERA_START_WORDLE (title suffix "Legacy")
+    current  → wordle_number >= CURRENT_ERA_START_WORDLE (no title annotation)
+    legacy   → wordle_number <  CURRENT_ERA_START_WORDLE (title suffix "Legacy")
+    combined → no era predicate at all, so both eras count together
     """
     cutoff = int(config.CURRENT_ERA_START_WORDLE)
     if era == "legacy":
         return f"AND {column} < {cutoff}", "Legacy"
+    if era == "combined":
+        return "", "Combined Eras"
     return f"AND {column} >= {cutoff}", None
 
 
@@ -130,7 +134,7 @@ def build_window_filter(season="current", year=None, month=None, quarter=None,
       quarter            → that quarter (year defaults to the current year)
       year and/or month  → that calendar range, season ignored
       season="all"       → the whole era
-      era="legacy"       → no season window; see below
+      era≠"current"      → no season window; see below
       otherwise          → the season in progress, or nothing before cutover
 
     The year/month rule is load-bearing: the monthly recap passes both, so it
@@ -141,8 +145,9 @@ def build_window_filter(season="current", year=None, month=None, quarter=None,
     The era rule is equally load-bearing. Legacy means wordle_number below
     CURRENT_ERA_START_WORDLE, i.e. #1777 = 2026-05-01 and earlier, while the
     first season is Q4 2026. Those predicates are disjoint, so applying the
-    season default to a legacy request returns nothing at all. An explicit
-    year/month/quarter still works with era=legacy.
+    season default to a legacy request returns nothing at all. The same skip
+    suits era=combined, whose whole point is the full history rather than one
+    quarter of it. An explicit year/month/quarter still works with either.
     """
     if quarter is not None:
         y = int(year) if year is not None else (today or wordle_today()).year

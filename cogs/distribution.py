@@ -91,7 +91,7 @@ class DistributionCog(commands.Cog):
         month="Specific month to filter by (1–12); combined with year or current year",
         quarter="Specific quarter to show (uses current year if year is omitted; overrides month)",
         season="current season (default) or all for the full era",
-        era="current (Wordle #1777+, default) or legacy (pre-#1777)",
+        era="current (Wordle #1777+, default), legacy (pre-#1777) or combined (both)",
     )
     @app_commands.choices(
         month=MONTH_CHOICES, era=ERA_CHOICES,
