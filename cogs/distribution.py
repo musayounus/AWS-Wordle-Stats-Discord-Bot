@@ -21,7 +21,7 @@ GREEN = "#538d4e"
 RED = "#c0392b"
 
 
-def render_distribution(counts, title):
+def render_distribution(counts, title, subtitle=None):
     """PNG bytes of a Wordle-app style guess distribution.
 
     `counts` maps attempts (1-6, None for X) to a game count; missing keys are 0.
@@ -43,7 +43,7 @@ def render_distribution(counts, title):
 
     fig = Figure(figsize=(8, 4.5), dpi=100, facecolor=BACKGROUND)
     FigureCanvasAgg(fig)
-    heading = fig.text(0.5, 0.92, title.upper(), ha="center", va="center",
+    heading = fig.text(0.5, 0.93, title.upper(), ha="center", va="center",
                        color="white", fontsize=16, fontweight="bold")
     # A 32-char display name plus window and "Legacy" can overflow at 16pt, and
     # glyph widths vary too much to guess from len(), so measure and shrink.
@@ -52,7 +52,11 @@ def render_distribution(counts, title):
     if width > max_width:
         heading.set_fontsize(16 * max_width / width)
 
-    ax = fig.add_axes([0.06, 0.04, 0.9, 0.78])
+    if subtitle:
+        fig.text(0.5, 0.855, subtitle, ha="center", va="center",
+                 color="#b0b0b0", fontsize=11)
+
+    ax = fig.add_axes([0.06, 0.04, 0.9, 0.76 if subtitle else 0.79])
     ax.set_facecolor(BACKGROUND)
     ax.barh(range(len(ROWS)), widths, color=colours, height=0.72)
     ax.invert_yaxis()
@@ -137,7 +141,7 @@ class DistributionCog(commands.Cog):
         avg = sum((k or FAIL_PENALTY) * n for k, n in counts.items()) / total
 
         window = window_suffix or "All Time"
-        heading = ["Guess Distribution", window]
+        heading = ["Solve Distribution", window]
         title = f"📊 Solve Distribution ({window})"
         if user:
             heading.append(user.display_name)
@@ -146,18 +150,25 @@ class DistributionCog(commands.Cog):
             heading.append(era_suffix)
             title += f" — {era_suffix}"
 
-        png = await asyncio.to_thread(render_distribution, counts, " · ".join(heading))
+        # Shown twice on purpose: in the image so it survives being saved or
+        # shared, and as embed text so screen readers and search can reach it.
+        summary = f"{total} games · avg {avg:.2f}"
+        if not user:
+            summary += f" · {players} players"
+
+        png = await asyncio.to_thread(
+            render_distribution, counts, " · ".join(heading), summary,
+        )
 
         embed = discord.Embed(
             title=title,
-            description=" · ".join(f"{label}: {counts.get(key, 0)}" for key, label in ROWS),
+            description=(
+                f"**{summary}**\n"
+                + " · ".join(f"{label}: {counts.get(key, 0)}" for key, label in ROWS)
+            ),
             color=0x538d4e,
         )
         embed.set_image(url="attachment://distribution.png")
-        footer = f"{total} games · avg {avg:.2f}"
-        if not user:
-            footer += f" · {players} players"
-        embed.set_footer(text=footer)
 
         await interaction.followup.send(
             embed=embed, file=discord.File(BytesIO(png), filename="distribution.png"),
