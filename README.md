@@ -24,12 +24,9 @@ summary, or a plain `Wordle 1418 3/6` message. The bot parses all three, resolve
 mentions and display names to real Discord users, and stores everything in PostgreSQL
 on AWS RDS.
 
-<!-- Screenshot: drop docs/leaderboard.png in place, then delete these two comment markers. -->
-<!--
 <p align="center">
   <img src="docs/leaderboard.png" alt="The /leaderboard embed" width="520">
 </p>
--->
 
 ## Highlights
 
