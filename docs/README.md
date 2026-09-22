@@ -1,13 +1,12 @@
 # Screenshots
 
-Drop these three PNGs here, then uncomment the matching `<p align="center">` blocks in
-the root `README.md`:
+Images referenced by the root `README.md`.
 
-| File | What to capture |
-|---|---|
-| `leaderboard.png` | `/leaderboard` — a full board with rank arrows visible |
-| `awards.png` | `/quarterly_champions` or `/yearly_champions` — one award embed |
-| `distribution.png` | `/distribution` — the server-wide chart |
+| File | What it shows | Status |
+|---|---|---|
+| `leaderboard.png` | `/leaderboard` with ⬆️⬇️ rank movement | in place |
+| `distribution.png` | `/distribution` server-wide chart | in place |
+| `awards.png` | `/quarterly_champions` award embed | pending — first awards land October 2026 |
 
-Crop to the embed itself, keep Discord's dark theme, and avoid capturing real usernames
-you'd rather not publish.
+Capture the embed only, in Discord's dark theme, and keep the PNG close to its natural
+width so the README doesn't have to upscale it.

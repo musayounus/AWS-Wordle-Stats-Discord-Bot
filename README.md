@@ -25,8 +25,10 @@ mentions and display names to real Discord users, and stores everything in Postg
 on AWS RDS.
 
 <p align="center">
-  <img src="docs/leaderboard.png" alt="The /leaderboard embed" width="520">
+  <img src="docs/leaderboard.png" alt="The /leaderboard embed" width="380">
 </p>
+
+<p align="center"><i><code>/leaderboard</code> — ranked by average, with rank movement since the last puzzle</i></p>
 
 ## Highlights
 
@@ -137,13 +139,11 @@ keep a player who showed up twice from winning on a fluke.
 The ▲▼ arrows on `/leaderboard` come from `leaderboard_snapshots`, a per-puzzle
 rank snapshot written as each day is processed.
 
-<!-- Screenshots: drop docs/awards.png and docs/distribution.png in place, then delete these two comment markers. -->
-<!--
 <p align="center">
-  <img src="docs/awards.png" alt="Quarterly awards embed" width="520">
-  <img src="docs/distribution.png" alt="Solve distribution chart" width="420">
+  <img src="docs/distribution.png" alt="Solve distribution chart" width="560">
 </p>
--->
+
+<p align="center"><i><code>/distribution</code> — rendered server-side with matplotlib and posted as a PNG</i></p>
 
 ## Architecture
 
