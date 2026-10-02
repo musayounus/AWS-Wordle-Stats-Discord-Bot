@@ -191,6 +191,20 @@ async def setup_hook():
 
 @tasks.loop(minutes=5)
 async def heartbeat():
+    """Liveness signal — only emitted when the database actually answers.
+
+    CloudWatch turns any log line containing "Heartbeat" into the BotHeartbeat
+    metric, and the wordle-bot-no-logs alarm fires when that metric stops. So the
+    word must never be printed on a run where the database is unreachable: a bot
+    that keeps logging while every query fails is precisely what hid the September
+    2026 outage for nine days. The failure line below deliberately avoids the word.
+    """
+    try:
+        async with bot.pg_pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+    except Exception as e:
+        print(f"❌ Database check failed, liveness signal withheld: {e!r}", flush=True)
+        return
     print("💓 Heartbeat: bot is alive", flush=True)
 
 @bot.event
