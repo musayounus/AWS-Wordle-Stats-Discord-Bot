@@ -26,7 +26,13 @@ async def create_db_pool():
         ssl="require",
         min_size=1,
         max_size=5,
-        timeout=10
+        timeout=10,
+        # Keep the idle connection open instead of reaping it after 5 minutes.
+        # The bot is quiet for long stretches, so the reaper left the pool empty
+        # and RDS DatabaseConnections reading 0 — indistinguishable from an
+        # outage, which made that alarm flap. The heartbeat exercises this
+        # connection every 5 minutes, so it does not go stale.
+        max_inactive_connection_lifetime=0,
     )
     # verify connectivity
     async with pool.acquire() as conn:
